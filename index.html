@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>maimai Result Client (β)</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header>
+    <h1>maimai Result Client (β)</h1>
+    <p>① プレイ履歴ページの HTML を丸ごとコピペ → ② 解析 → ③ 必要ならAPI送信</p>
+  </header>
+
+  <section class="card">
+    <h2>API 設定（任意）</h2>
+    <label>API URL
+      <input id="apiUrl" type="url" placeholder="https://maimai-result.onrender.com/ingest">
+    </label>
+    <label>Bearer Token（あれば）
+      <input id="apiToken" type="text" placeholder="例: 12345...">
+    </label>
+    <button id="saveSettings">設定を保存</button>
+    <small>※端末ローカルに保存されます（localStorage）。</small>
+  </section>
+
+  <section class="card">
+    <h2>HTML 貼り付け</h2>
+    <textarea id="htmlInput" rows="10" placeholder="プレイ履歴ページのソースやページ全体を貼り付け"></textarea>
+    <div class="row">
+      <button id="parseBtn">解析する</button>
+      <button id="clearBtn" class="ghost">消去</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>解析結果</h2>
+    <div id="resultInfo" class="muted">まだ結果はありません</div>
+    <table id="resultTable" class="hidden">
+      <thead>
+        <tr><th>#</th><th>Title</th><th>Rate</th><th>PlayedAt</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div class="row">
+      <button id="sendBtn" disabled>APIへ送信</button>
+      <span id="sendStatus" class="muted"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>ブックマークレット（任意）</h2>
+    <p>このページを開いたまま、下のボタンでコードをコピーしてブラウザの「ブックマークのURL」に貼り付けてください。</p>
+    <button id="copyBM">ブックマークレットをコピー</button>
+    <details>
+      <summary>中身を見る</summary>
+      <pre id="bmSource" class="code small"></pre>
+    </details>
+    <small>※初回実行時のみ API URL / Token を聞かれ、以降はブラウザに保存されます。</small>
+  </section>
+
+  <footer>
+    <small>© You — Client-side app. Data is kept locally unless you choose to POST.</small>
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>
