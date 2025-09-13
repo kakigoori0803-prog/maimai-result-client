@@ -3,300 +3,293 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>maimai Result Client (β)</title>
+<title>maimai Result Client – 配布用（自動設定 & ユーザー分離）</title>
 <style>
-  :root { color-scheme: dark; }
-  body { margin: 0 auto; padding: 24px; max-width: 920px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif; }
-  h1 { font-size: 28px; margin: 0 0 16px; }
-  section { border: 1px solid #333; border-radius: 10px; padding: 16px; margin: 18px 0; background: #111; }
-  .row { display: grid; grid-template-columns: 140px 1fr; gap: 10px 14px; align-items: center; margin: 10px 0; }
-  label { opacity: .85; }
-  input[type="text"], input[type="url"], textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #333; background:#0a0a0a; color:#fff; font-size: 16px; }
-  textarea { min-height: 220px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono","Noto Sans Mono", monospace; }
-  .btns { display: flex; gap: 10px; flex-wrap: wrap; }
-  button { appearance: none; border: 1px solid #2f6; background: #143; color:#eaffea; padding: 10px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; }
-  button.subtle { border-color:#444; background:#1a1a1a; color:#ddd; }
-  button.warn { border-color:#f66; background:#421616; color:#fee; }
-  .muted { opacity: .75; font-size: 13px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-  th, td { border-bottom: 1px solid #2a2a2a; padding: 10px; text-align: left; vertical-align: top; }
-  code { background:#1b1b1b; padding: 2px 6px; border-radius: 6px; }
-  .ok { color:#8cff9b; }
-  .err { color:#ff8f8f; white-space: pre-wrap; }
-  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono","Noto Sans Mono", monospace; }
+  :root{color-scheme:dark}
+  body{margin:0 auto;max-width:960px;padding:24px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Hiragino Sans","Noto Sans JP","Helvetica Neue",Arial}
+  h1{font-size:26px;margin:0 0 10px}
+  section{background:#111;border:1px solid #2a2a33;border-radius:12px;padding:16px;margin:16px 0}
+  .row{display:grid;grid-template-columns:160px 1fr;gap:10px 14px;align-items:center}
+  label{opacity:.9}
+  input[type="text"],input[type="url"],textarea{width:100%;box-sizing:border-box;background:#0c0c10;color:#e9e9ef;border:1px solid #2a2a33;border-radius:10px;padding:10px 12px;font:inherit}
+  textarea{min-height:220px;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+  button{appearance:none;border:1px solid #1b62d4;background:#1f6feb;color:#fff;border-radius:999px;padding:10px 14px;font-weight:700;cursor:pointer}
+  button.subtle{background:#2a2a33;border-color:#3a3a45}
+  table{width:100%;border-collapse:collapse;margin-top:10px}
+  th,td{border-bottom:1px solid #2a2a33;padding:8px;text-align:left;vertical-align:top}
+  .muted{opacity:.8;font-size:13px}
+  .ok{color:#6ee7a8}.err{color:#ff8f8f;white-space:pre-wrap}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
 </style>
 </head>
 <body>
-  <h1>maimai Result Client (β)</h1>
-  <p class="muted">① プレイ履歴ページの HTML を丸ごと貼り付け → ② <b>解析</b> → ③ 必要なら <b>API 送信</b></p>
+  <h1>maimai Result Client</h1>
+  <p class="muted">① まいまい履歴 HTML を渡す（ブックマークレット推奨）→ ② <b>解析</b> → ③ <b>API送信</b>（設定＆ユーザーIDは自動）</p>
 
-  <!-- API 設定 -->
+  <!-- ユーザーID（自動発行＆Sync Code 任意） -->
   <section>
-    <h2>API 設定（任意）</h2>
+    <h2>ユーザーID</h2>
     <div class="row">
-      <label for="apiUrlInput">API URL</label>
-      <input id="apiUrlInput" type="url" placeholder="https://example.onrender.com/ingest" />
+      <label>あなたのID（自動）</label>
+      <input id="userIdView" type="text" readonly />
     </div>
     <div class="row">
-      <label for="apiTokenInput">Bearer Token</label>
-      <input id="apiTokenInput" type="text" placeholder="例: 12345..." />
+      <label>Sync Code（任意）</label>
+      <input id="syncCode" type="text" placeholder="複数端末で同じIDにしたいときだけ入力" />
     </div>
     <div class="btns">
-      <button id="saveCfgBtn">設定を保存</button>
-      <button id="clearCfgBtn" class="subtle">保存した設定を削除</button>
+      <button id="saveSync" class="subtle">Sync Code を保存</button>
+      <span class="muted">※未入力なら自動ID（UUID）を使います。</span>
     </div>
-    <p class="muted">※この2つは端末ローカル（localStorage）に保存されます。</p>
   </section>
 
-  <!-- 入力 -->
+  <!-- HTML 貼り付け -->
   <section>
     <h2>HTML 貼り付け</h2>
     <div class="row">
-      <label for="sourceUrl">元ページのURL</label>
+      <label>元ページURL</label>
       <input id="sourceUrl" type="url" placeholder="自動入力されます" />
     </div>
-    <textarea id="htmlInput" placeholder="ここに maimai のプレイ履歴ページの HTML 全体を貼り付け"></textarea>
-    <div class="btns" style="margin-top:10px">
+    <textarea id="htmlInput" placeholder="ここに maimai のプレイ履歴ページ HTML 全体を貼り付け"></textarea>
+    <div class="btns">
       <button id="analyzeBtn">解析する</button>
       <button id="clearInputBtn" class="subtle">消去</button>
     </div>
     <div id="parseStatus" class="muted"></div>
   </section>
 
-  <!-- 結果 -->
+  <!-- 解析結果 -->
   <section>
     <h2>解析結果</h2>
-    <table id="resultsTable">
-      <thead>
-        <tr><th>#</th><th>Title</th><th>Rate</th><th>PlayedAt</th><th>URL</th></tr>
-      </thead>
+    <table>
+      <thead><tr><th>#</th><th>Title</th><th>Rate</th><th>PlayedAt</th><th>URL</th></tr></thead>
       <tbody id="resultsBody"><tr><td colspan="5" class="muted">まだ結果はありません。</td></tr></tbody>
     </table>
     <div class="btns">
       <button id="sendBtn">APIへ送信</button>
+      <span id="sendStatus" class="muted"></span>
     </div>
-    <div id="sendStatus" class="muted"></div>
   </section>
 
-  <!-- ブックマークレット -->
+  <!-- ブックマークレット（配布用・自動設定内蔵） -->
   <section>
-    <h2>ブックマークレット（任意）</h2>
-    <p class="muted">このページの URL を自動指定し、<b>HTML＋設定</b>を渡します（初回も自動保存）。</p>
+    <h2>ブックマークレット</h2>
+    <p class="muted">このページへ HTML と <b>API/TOKEN/ユーザーID</b> を自動で渡します（利用者は押すだけ）。</p>
     <div class="row">
-      <label>あなたのページ</label>
+      <label>このページのURL</label>
       <input id="destUrl" type="url" />
     </div>
     <div class="btns">
-      <button id="genBM">ブックマークレットを生成</button>
-      <button id="copyBM" class="subtle">コードをコピー</button>
+      <button id="genBM">生成</button>
+      <button id="copyBM" class="subtle">コピー</button>
     </div>
     <textarea id="bmCode" class="mono" placeholder="ここにコードが出ます"></textarea>
+    <p class="muted">※ iOS Safari ではブックマークの <b>URL欄</b>に丸ごと1行で貼り付け、タップ実行（長押しはNG）。</p>
   </section>
 
 <script>
-/* ========== ユーティリティ & 保存 ========== */
-const $ = (sel) => document.querySelector(sel);
+/*** ▼▼▼ ここだけ置換してください（固定の送信先とトークン） ▼▼▼ ***/
+const DEFAULTS = {
+  API:   'https://maimai-result.onrender.com/ingest', // ← あなたの Render エンドポイント
+  TOKEN: 'PUT_YOUR_PUBLIC_WRITE_TOKEN_HERE'            // ← 公開許容の書込トークン
+};
+/*** ▲▲▲ ここまで ▲▲▲ ***/
+
+const $ = s => document.querySelector(s);
 const els = {
-  api:   $('#apiUrlInput'),
-  tok:   $('#apiTokenInput'),
-  url:   $('#sourceUrl'),
-  html:  $('#htmlInput'),
-  rbody: $('#resultsBody'),
-  pstat: $('#parseStatus'),
-  sstat: $('#sendStatus'),
-  dest:  $('#destUrl'),
-  bm:    $('#bmCode'),
+  uidView: $('#userIdView'),
+  sync:    $('#syncCode'),
+  saveSync:$('#saveSync'),
+  url:     $('#sourceUrl'),
+  html:    $('#htmlInput'),
+  rbody:   $('#resultsBody'),
+  pstat:   $('#parseStatus'),
+  sendBtn: $('#sendBtn'),
+  sstat:   $('#sendStatus'),
+  dest:    $('#destUrl'),
+  bm:      $('#bmCode'),
+  genBM:   $('#genBM'),
+  copyBM:  $('#copyBM')
 };
 
 const store = {
-  get api()   { return localStorage.getItem('apiUrl')   || ''; },
-  set api(v)  { localStorage.setItem('apiUrl',   v||''); },
-  get token() { return localStorage.getItem('apiToken') || ''; },
+  get api(){ return localStorage.getItem('apiUrl') || DEFAULTS.API; },
+  set api(v){ localStorage.setItem('apiUrl', v||''); },
+  get token(){ return localStorage.getItem('apiToken') || DEFAULTS.TOKEN; },
   set token(v){ localStorage.setItem('apiToken', v||''); },
+  get uid(){ return localStorage.getItem('userId') || ''; },
+  set uid(v){ localStorage.setItem('userId', v||''); }
 };
 
-function hydrateUIFromStore() {
-  if (els.api) els.api.value = store.api;
-  if (els.tok) els.tok.value = store.token;
+// --- ユーザーID（UUID or Sync Code） ---
+function genUUID() {
+  try { return crypto.randomUUID(); }
+  catch { return 'u-' + Math.random().toString(36).slice(2) + Date.now().toString(36); }
 }
-
-/* ========== window.name / #fragment 受け取り ========== */
-(function receiveFromBookmarkOrHash() {
-  // 1) window.name (MAI:BASE64(JSON))
-  try {
-    if (window.name && window.name.startsWith('MAI:')) {
-      const json = decodeURIComponent(escape(atob(window.name.slice(4))));
-      const payload = JSON.parse(json);
-      if (payload) {
-        if (payload.config) {
-          if (payload.config.api)   store.api   = payload.config.api;
-          if (payload.config.token) store.token = payload.config.token;
-        }
-        if (payload.sourceUrl && els.url)  els.url.value  = payload.sourceUrl;
-        if (payload.html && els.html)      els.html.value = payload.html;
-      }
-      window.name = ''; // 消しておく
-    }
-  } catch(e){ console.error(e); }
-
-  // 2) URLフラグメント #api=...&token=... → 保存 & アドレスバーから除去
-  try {
-    if (location.hash && location.hash.includes('=')) {
-      const params = new URLSearchParams(location.hash.slice(1));
-      const api   = params.get('api');
-      const token = params.get('token');
-      if (api)   store.api   = api;
-      if (token) store.token = token;
-      history.replaceState({}, '', location.pathname);
-    }
-  } catch(e){ console.error(e); }
-
-  // ストア → UI
-  hydrateUIFromStore();
-})();
-
-/* ========== API 設定ボタン ========== */
-$('#saveCfgBtn')?.addEventListener('click', () => {
-  store.api   = els.api.value.trim();
-  store.token = els.tok.value.trim();
+function getUserId(){
+  let id = store.uid;
+  if (!id) { id = genUUID(); store.uid = id; }
+  return id;
+}
+function applyUserIdToUI(){
+  els.uidView.value = getUserId();
+}
+els.saveSync.addEventListener('click', ()=>{
+  const v = (els.sync.value||'').trim();
+  if (!v){ store.uid = genUUID(); } else { store.uid = v; }
+  applyUserIdToUI();
   alert('保存しました');
 });
-$('#clearCfgBtn')?.addEventListener('click', () => {
-  if (!confirm('保存済みの API URL / Token を削除しますか？')) return;
-  store.api = ''; store.token = '';
-  hydrateUIFromStore();
-  alert('削除しました');
-});
 
-/* ========== 解析 ========== */
-$('#clearInputBtn')?.addEventListener('click', () => {
-  els.html.value = ''; els.url.value = '';
-  els.pstat.textContent = '';
+// --- 受け取り（window.name / #hash） ---
+(function receive(){
+  // window.name: "MAI:" + b64(JSON)
+  try{
+    if (window.name && window.name.startsWith('MAI:')) {
+      const json = decodeURIComponent(escape(atob(window.name.slice(4))));
+      const payload = JSON.parse(json||'{}'); // { html, sourceUrl, config:{api,token,userId} }
+      if (payload.config?.userId) store.uid = payload.config.userId;
+      if (payload.config?.api)    store.api = payload.config.api;
+      if (payload.config?.token)  store.token = payload.config.token;
+      if (payload.sourceUrl && els.url)  els.url.value  = payload.sourceUrl;
+      if (payload.html && els.html)      els.html.value = payload.html;
+      window.name = ''; // クリア
+    }
+  }catch(e){ console.error(e); }
+
+  // #api & #token & #uid も受け取れるように（サーバには送られない）
+  try{
+    if (location.hash && location.hash.includes('=')) {
+      const q = new URLSearchParams(location.hash.slice(1));
+      if (q.get('uid'))  store.uid   = q.get('uid');
+      if (q.get('api'))  store.api   = q.get('api');
+      if (q.get('token'))store.token = q.get('token');
+      history.replaceState({},'',location.pathname);
+    }
+  }catch(e){ console.error(e); }
+
+  applyUserIdToUI();
+})();
+
+// --- 解析（超ざっくり：必要なら差し替えOK） ---
+$('#clearInputBtn').addEventListener('click', ()=>{
+  els.html.value=''; els.url.value=''; els.pstat.textContent='';
   els.rbody.innerHTML = '<tr><td colspan="5" class="muted">まだ結果はありません。</td></tr>';
 });
-
-$('#analyzeBtn')?.addEventListener('click', () => {
+$('#analyzeBtn').addEventListener('click', ()=>{
   const html = els.html.value;
-  if (!html.trim()) { els.pstat.textContent = 'HTMLが空です。'; return; }
+  if (!html.trim()){ els.pstat.textContent = 'HTMLが空です。'; return; }
   const items = parseMaimai(html, els.url.value.trim());
   renderResults(items);
 });
 
-/* ざっくりパーサ：タイトル／達成率／日時をできるだけ拾う */
-function parseMaimai(html, href) {
-  const dom = new DOMParser().parseFromString(html, 'text/html');
+function parseMaimai(html, href){
+  const dom = new DOMParser().parseFromString(html,'text/html');
+  const items = [];
+  // ゆるめに候補を拾う（必要に応じて強化）
+  const blocks = [...dom.querySelectorAll('.playlog,.record,section,article,li,div')].slice(0,50);
+  for (const el of blocks) {
+    const txt = (el.textContent||'').trim();
+    if (!/MASTER|EXPERT|ADVANCED|BASIC|ACHIEVEMENT|%/.test(txt)) continue;
 
-  // タイトル候補
-  const title =
-    dom.querySelector('.h_ach1')?.textContent?.trim() ||
-    dom.querySelector('.music_name, .muzukashi-name, .name, .musicName')?.textContent?.trim() ||
-    dom.querySelector('input[type="text"][value]')?.getAttribute('value')?.trim() ||
-    dom.title?.trim() || '';
+    let title = (el.querySelector('.music_name,.music-title,.name,.musicName,h3,h4,strong')||{}).textContent||'';
+    title = title.trim().replace(/\s+/g,' ');
+    if (!title) continue;
 
-  // 達成率候補（% を含む数値を拾う）
-  let rate = '';
-  const textAll = dom.body ? dom.body.textContent : '';
-  const m = textAll && textAll.match(/(\d{1,3}\.\d{2,5})\s*%/);
-  if (m) rate = m[1];
+    let rate = '';
+    const m = txt.match(/(\d{1,3}\.\d{2,4})\s*%/);
+    if (m) rate = m[1];
 
-  // 日時候補
-  const playedAt =
-    dom.querySelector('.play_datalist .date, .date, time, .playedAt')?.textContent?.trim() || '';
+    let playedAt = (el.querySelector('.date,.playedAt,time')||{}).textContent||'';
+    playedAt = playedAt.trim();
 
-  const item = { title, rate, playedAt, href: href || '' };
-  return [item];
-}
-
-function renderResults(items) {
-  if (!items || !items.length) {
-    els.rbody.innerHTML = '<tr><td colspan="5" class="muted">解析できませんでした。</td></tr>';
-    els.pstat.textContent = '解析失敗';
-    return;
+    items.push({ title, rate, playedAt, href });
+    if (items.length>=50) break;
   }
-  els.rbody.innerHTML = items.map((it, i) => `
+  if (!items.length) {
+    // 最低1件
+    const t = (dom.title||'').trim() || 'Unknown';
+    const m = (dom.body?.textContent||'').match(/(\d{1,3}\.\d{2,4})\s*%/);
+    items.push({ title:t, rate:m?m[1]:'', playedAt:'', href });
+  }
+  return items;
+}
+function esc(s){ return String(s||'').replace(/[&<>"]/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
+function renderResults(items){
+  if (!items?.length){ els.rbody.innerHTML='<tr><td colspan="5" class="muted">解析できませんでした。</td></tr>'; els.pstat.textContent='解析失敗'; return; }
+  els.rbody.innerHTML = items.map((it,i)=>`
     <tr>
       <td>${i+1}</td>
-      <td>${escapeHtml(it.title||'')}</td>
-      <td class="mono">${escapeHtml(it.rate||'')}</td>
-      <td class="mono">${escapeHtml(it.playedAt||'')}</td>
-      <td class="mono">${it.href ? `<a href="${it.href}" target="_blank" rel="noopener">link</a>` : ''}</td>
-    </tr>
-  `).join('');
+      <td>${esc(it.title)}</td>
+      <td class="mono">${esc(it.rate)}${it.rate?'%':''}</td>
+      <td class="mono">${esc(it.playedAt)}</td>
+      <td class="mono">${it.href?`<a href="${it.href}" target="_blank" rel="noopener">link</a>`:''}</td>
+    </tr>`).join('');
   els.pstat.innerHTML = `<span class="ok">解析OK</span> ${items.length}件`;
 }
-function escapeHtml(s){ return (s||'').replace(/[&<>"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
 
-/* ========== API 送信 ========== */
-$('#sendBtn')?.addEventListener('click', async () => {
+// --- 送信（userId 付き） ---
+els.sendBtn.addEventListener('click', async ()=>{
   const rows = [...els.rbody.querySelectorAll('tr')];
-  if (!rows.length || rows[0].querySelector('.muted')) {
-    els.sstat.textContent = '送信するデータがありません。';
-    return;
-  }
-  const api = store.api.trim();
-  if (!api) { els.sstat.textContent = 'API URL が未設定です。'; return; }
-
-  // テーブル → アイテム
-  const items = [...rows].map((tr) => {
+  if (!rows.length || rows[0].querySelector('.muted')) { els.sstat.textContent='送信するデータがありません。'; return; }
+  const items = rows.map(tr=>{
     const tds = tr.querySelectorAll('td');
     return {
-      title:    tds[1]?.textContent?.trim() || '',
-      rate:     tds[2]?.textContent?.trim() || '',
+      title: tds[1]?.textContent?.trim() || '',
+      rate:  (tds[2]?.textContent?.replace('%','').trim() || ''),
       playedAt: tds[3]?.textContent?.trim() || '',
-      href:     (tds[4]?.querySelector('a')?.href) || ''
+      href:  (tds[4]?.querySelector('a')?.href || '')
     };
   });
 
+  const body = { userId: getUserId(), sourceUrl: els.url.value.trim() || null, items };
   els.sstat.textContent = '送信中…';
-  try {
-    const headers = { 'Content-Type': 'application/json' };
-    if (store.token) headers['Authorization'] = `Bearer ${store.token}`;
-    const res = await fetch(api, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ items })
-    });
-    const text = await res.text().catch(()=> '');
-    if (!res.ok) throw new Error(text || (`HTTP ${res.status}`));
-    els.sstat.innerHTML = `<span class="ok">送信OK</span> ${escapeHtml(text)}`;
-  } catch (e) {
-    els.sstat.innerHTML = `<span class="err">送信エラー：${escapeHtml(String(e.message||e))}</span>`;
+  try{
+    const headers = { 'Content-Type':'application/json' };
+    const token = store.token;
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(store.api, { method:'POST', headers, body: JSON.stringify(body) });
+    const txt = await res.text().catch(()=> '');
+    if (!res.ok) throw new Error(txt || `HTTP ${res.status}`);
+    els.sstat.innerHTML = `<span class="ok">送信OK</span> ${esc(txt)}`;
+  }catch(e){
+    els.sstat.innerHTML = `<span class="err">送信エラー：${esc(e.message||String(e))}</span>`;
   }
 });
 
-/* ========== ブックマークレット生成 ========== */
-function currentDest() {
-  // いま開いている index.html のURL（#は除去）
-  return location.origin + location.pathname.replace(/index\.html?$/i,'');
-}
-function buildBookmarklet(destUrl, api, token) {
-  const DEST  = destUrl.endsWith('/') ? destUrl : (destUrl + '/');
-  const A     = api   ? `'${api.replace(/'/g,"\\'")}'`   : "''";
-  const T     = token ? `'${token.replace(/'/g,"\\'")}'` : "''";
-  return `javascript:(()=>{try{
-const DEST='${DEST}';const API=${A};const TOKEN=${T};
-const payload={html:document.documentElement.outerHTML,sourceUrl:location.href,config:{api:API,token:TOKEN}};
-window.name='MAI:'+btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-const frag=new URLSearchParams(); if(API)frag.set('api',API); if(TOKEN)frag.set('token',TOKEN);
-location.href=DEST+(frag.toString()?('#'+frag.toString()):'');
-}catch(e){alert('Bookmarklet error: '+(e&&e.message?e.message:e));}})();`;
-}
-function setDefaultDest() { els.dest.value = currentDest(); }
+// --- ブックマークレット生成（API/TOKEN/UID 内蔵 & 同タブ遷移） ---
+function currentDest(){ return location.origin + location.pathname.replace(/index\.html?$/i,''); }
+function setDefaultDest(){ els.dest.value = currentDest(); }
 setDefaultDest();
 
-$('#genBM')?.addEventListener('click', () => {
-  const code = buildBookmarklet(els.dest.value.trim() || currentDest(), store.api, store.token);
-  els.bm.value = code;
+function buildBookmarklet(destUrl){
+  const DEST = destUrl.endsWith('/') ? destUrl : destUrl + '/';
+  const API  = store.api.replace(/'/g,"\\'");
+  const TOK  = store.token.replace(/'/g,"\\'");
+  const UID  = getUserId().replace(/'/g,"\\'");
+  return `javascript:(()=>{try{
+const DEST='${DEST}';const API='${API}';const TOKEN='${TOK}';const USER='${UID}';
+const payload={html:document.documentElement.outerHTML,sourceUrl:location.href,config:{api:API,token:TOKEN,userId:USER}};
+window.name='MAI:'+btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+location.replace(DEST);
+}catch(e){alert('Bookmarklet error: '+(e&&e.message?e.message:e));}})();`;
+}
+els.genBM.addEventListener('click', ()=>{
+  els.bm.value = buildBookmarklet(els.dest.value.trim() || currentDest());
 });
-$('#copyBM')?.addEventListener('click', async () => {
-  if (!els.bm.value) { const code = buildBookmarklet(els.dest.value.trim() || currentDest(), store.api, store.token); els.bm.value = code; }
-  try { await navigator.clipboard.writeText(els.bm.value); alert('コピーしました'); }
-  catch { els.bm.select(); document.execCommand('copy'); alert('コピーしました（互換）'); }
+els.copyBM.addEventListener('click', async ()=>{
+  if (!els.bm.value) els.bm.value = buildBookmarklet(els.dest.value.trim() || currentDest());
+  try{ await navigator.clipboard.writeText(els.bm.value); alert('コピーしました'); }
+  catch{ els.bm.select(); document.execCommand('copy'); alert('コピーしました（互換）'); }
 });
 
-/* ========== 初期UI反映（ロード時） ========== */
-document.addEventListener('DOMContentLoaded', ()=> {
-  hydrateUIFromStore();
+// --- 初期表示 ---
+document.addEventListener('DOMContentLoaded', ()=>{
+  // DEFAULTS を常に適用（配布者が差し替え済み前提）
+  if (!localStorage.getItem('apiUrl'))   store.api   = DEFAULTS.API;
+  if (!localStorage.getItem('apiToken')) store.token = DEFAULTS.TOKEN;
+  applyUserIdToUI();
 });
 </script>
 </body>
