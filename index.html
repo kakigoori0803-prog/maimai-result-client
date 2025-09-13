@@ -89,10 +89,10 @@
   </section>
 
 <script>
-/*** ▼▼▼ ここだけ置換してください（固定の送信先とトークン） ▼▼▼ ***/
+/*** ▼▼▼ 固定の送信先とトークン（埋め込み済み） ▼▼▼ ***/
 const DEFAULTS = {
-  API:   'https://maimai-result.onrender.com/ingest', // ← あなたの Render エンドポイント
-  TOKEN: 'PUT_YOUR_PUBLIC_WRITE_TOKEN_HERE'            // ← 公開許容の書込トークン
+  API:   'https://maimai-result.onrender.com/ingest',
+  TOKEN: '677212069901c46a68a76e31ad8ba32a'
 };
 /*** ▲▲▲ ここまで ▲▲▲ ***/
 
@@ -172,7 +172,7 @@ els.saveSync.addEventListener('click', ()=>{
   applyUserIdToUI();
 })();
 
-// --- 解析（超ざっくり：必要なら差し替えOK） ---
+// --- 解析（ざっくり。必要に応じて強化OK） ---
 $('#clearInputBtn').addEventListener('click', ()=>{
   els.html.value=''; els.url.value=''; els.pstat.textContent='';
   els.rbody.innerHTML = '<tr><td colspan="5" class="muted">まだ結果はありません。</td></tr>';
@@ -243,7 +243,7 @@ els.sendBtn.addEventListener('click', async ()=>{
     };
   });
 
-  const body = { userId: getUserId(), sourceUrl: els.url.value.trim() || null, items };
+  const body = { userId: store.uid || (store.uid=crypto.randomUUID()), sourceUrl: els.url.value.trim() || null, items };
   els.sstat.textContent = '送信中…';
   try{
     const headers = { 'Content-Type':'application/json' };
@@ -262,6 +262,8 @@ els.sendBtn.addEventListener('click', async ()=>{
 function currentDest(){ return location.origin + location.pathname.replace(/index\.html?$/i,''); }
 function setDefaultDest(){ els.dest.value = currentDest(); }
 setDefaultDest();
+
+function getUserId(){ return store.uid || (store.uid = (crypto.randomUUID?crypto.randomUUID():'u-'+Math.random().toString(36).slice(2))); }
 
 function buildBookmarklet(destUrl){
   const DEST = destUrl.endsWith('/') ? destUrl : destUrl + '/';
