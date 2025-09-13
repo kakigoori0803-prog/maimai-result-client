@@ -1,312 +1,303 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>maimai Result Client (β)</title>
-  <style>
-    :root{color-scheme:dark light}
-    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";margin:0;background:#0b0b0e;color:#e9e9ef}
-    .wrap{max-width:980px;margin:0 auto;padding:24px 16px}
-    h1{font-size:28px;margin:0 0 8px}
-    h2{font-size:20px;margin:28px 0 12px}
-    .card{background:#141418;border:1px solid #2a2a33;border-radius:12px;padding:16px;margin:16px 0}
-    label{display:block;font-size:13px;opacity:.85;margin:.35rem 0 .25rem}
-    input,textarea,button{font:inherit}
-    input,textarea{width:100%;background:#0f0f13;border:1px solid #2a2a33;border-radius:10px;color:#e9e9ef;padding:10px 12px}
-    textarea{min-height:220px;resize:vertical;line-height:1.45}
-    .row{display:flex;gap:10px;flex-wrap:wrap}
-    .row > *{flex:1 1 260px}
-    .btn{display:inline-flex;gap:.5rem;align-items:center;background:#1f6feb;border:1px solid #1b62d4;padding:10px 14px;border-radius:999px;color:#fff;cursor:pointer}
-    .btn.secondary{background:#2a2a33;border-color:#3a3a45}
-    .btn:disabled{opacity:.6;cursor:not-allowed}
-    table{width:100%;border-collapse:collapse;margin-top:10px}
-    th,td{border-bottom:1px solid #2a2a33;padding:10px;text-align:left;font-size:14px}
-    code,pre{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace}
-    .muted{opacity:.8}
-    .ok{color:#6ee7a8}
-    .warn{color:#facc15}
-    .err{color:#f87171}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>maimai Result Client (β)</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0 auto; padding: 24px; max-width: 920px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif; }
+  h1 { font-size: 28px; margin: 0 0 16px; }
+  section { border: 1px solid #333; border-radius: 10px; padding: 16px; margin: 18px 0; background: #111; }
+  .row { display: grid; grid-template-columns: 140px 1fr; gap: 10px 14px; align-items: center; margin: 10px 0; }
+  label { opacity: .85; }
+  input[type="text"], input[type="url"], textarea { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #333; background:#0a0a0a; color:#fff; font-size: 16px; }
+  textarea { min-height: 220px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono","Noto Sans Mono", monospace; }
+  .btns { display: flex; gap: 10px; flex-wrap: wrap; }
+  button { appearance: none; border: 1px solid #2f6; background: #143; color:#eaffea; padding: 10px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+  button.subtle { border-color:#444; background:#1a1a1a; color:#ddd; }
+  button.warn { border-color:#f66; background:#421616; color:#fee; }
+  .muted { opacity: .75; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { border-bottom: 1px solid #2a2a2a; padding: 10px; text-align: left; vertical-align: top; }
+  code { background:#1b1b1b; padding: 2px 6px; border-radius: 6px; }
+  .ok { color:#8cff9b; }
+  .err { color:#ff8f8f; white-space: pre-wrap; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono","Noto Sans Mono", monospace; }
+</style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>maimai Result Client (β)</h1>
-    <p class="muted">① プレイ履歴ページの HTML を丸ごと貼り付け → ② 解析 → ③ 必要なら API 送信</p>
+  <h1>maimai Result Client (β)</h1>
+  <p class="muted">① プレイ履歴ページの HTML を丸ごと貼り付け → ② <b>解析</b> → ③ 必要なら <b>API 送信</b></p>
 
-    <!-- API 設定 -->
-    <div class="card">
-      <h2>API 設定（任意）</h2>
-      <div class="row">
-        <div>
-          <label for="apiUrl">API URL</label>
-          <input id="apiUrl" type="url" placeholder="https://example.com/ingest"
-                 value="https://maimai-result.onrender.com/ingest" />
-        </div>
-        <div>
-          <label for="token">Bearer Token（あれば）</label>
-          <input id="token" type="text" placeholder="例: 12345..." />
-        </div>
-      </div>
-      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-        <button id="saveSettings" class="btn">設定を保存</button>
-        <button id="clearSettings" class="btn secondary">保存した設定を削除</button>
-        <span id="saveMsg" class="muted"></span>
-      </div>
+  <!-- API 設定 -->
+  <section>
+    <h2>API 設定（任意）</h2>
+    <div class="row">
+      <label for="apiUrlInput">API URL</label>
+      <input id="apiUrlInput" type="url" placeholder="https://example.onrender.com/ingest" />
     </div>
-
-    <!-- HTML 貼り付け -->
-    <div class="card">
-      <h2>HTML 貼り付け</h2>
-      <label for="sourceUrl">元ページのURL（自動入力されます）</label>
-      <input id="sourceUrl" type="url" placeholder="https://maimaidx.jp/..." />
-      <label for="htmlInput">ここに maimai のプレイ履歴ページの HTML を貼り付け</label>
-      <textarea id="htmlInput" placeholder="ページ全体のHTMLをペースト"></textarea>
-
-      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-        <button id="analyze" class="btn">解析する</button>
-        <span id="parseMsg" class="muted"></span>
-      </div>
+    <div class="row">
+      <label for="apiTokenInput">Bearer Token</label>
+      <input id="apiTokenInput" type="text" placeholder="例: 12345..." />
     </div>
-
-    <!-- 解析結果 -->
-    <div class="card">
-      <h2>解析結果</h2>
-      <div id="resultWrap" class="muted">まだ結果はありません。</div>
-      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-        <button id="sendApi" class="btn" disabled>APIへ送信</button>
-        <span id="apiMsg" class="muted"></span>
-      </div>
+    <div class="btns">
+      <button id="saveCfgBtn">設定を保存</button>
+      <button id="clearCfgBtn" class="subtle">保存した設定を削除</button>
     </div>
+    <p class="muted">※この2つは端末ローカル（localStorage）に保存されます。</p>
+  </section>
 
-    <!-- ブックマークレット（任意） -->
-    <div class="card">
-      <h2>ブックマークレット（任意）</h2>
-      <p class="muted">このページに HTML を自動で送り込む用。Safari でブックマークに追加し、URL欄に以下を貼り付け。</p>
-      <pre id="bmCode" style="white-space:pre-wrap"></pre>
-      <button id="copyBm" class="btn secondary">コードをコピー</button>
+  <!-- 入力 -->
+  <section>
+    <h2>HTML 貼り付け</h2>
+    <div class="row">
+      <label for="sourceUrl">元ページのURL</label>
+      <input id="sourceUrl" type="url" placeholder="自動入力されます" />
     </div>
-  </div>
+    <textarea id="htmlInput" placeholder="ここに maimai のプレイ履歴ページの HTML 全体を貼り付け"></textarea>
+    <div class="btns" style="margin-top:10px">
+      <button id="analyzeBtn">解析する</button>
+      <button id="clearInputBtn" class="subtle">消去</button>
+    </div>
+    <div id="parseStatus" class="muted"></div>
+  </section>
 
-  <script>
-    /********** 設定の保存/復元 **********/
-    const $ = (sel, root=document) => root.querySelector(sel);
-    const apiUrlEl = $('#apiUrl');
-    const tokenEl  = $('#token');
-    const srcEl    = $('#sourceUrl');
-    const htmlEl   = $('#htmlInput');
-    const analyzeBtn = $('#analyze');
-    const parseMsg = $('#parseMsg');
-    const resultWrap = $('#resultWrap');
-    const sendBtn = $('#sendApi');
-    const apiMsg = $('#apiMsg');
-    const saveMsg = $('#saveMsg');
+  <!-- 結果 -->
+  <section>
+    <h2>解析結果</h2>
+    <table id="resultsTable">
+      <thead>
+        <tr><th>#</th><th>Title</th><th>Rate</th><th>PlayedAt</th><th>URL</th></tr>
+      </thead>
+      <tbody id="resultsBody"><tr><td colspan="5" class="muted">まだ結果はありません。</td></tr></tbody>
+    </table>
+    <div class="btns">
+      <button id="sendBtn">APIへ送信</button>
+    </div>
+    <div id="sendStatus" class="muted"></div>
+  </section>
 
-    function loadSettings(){
-      const s = localStorage.getItem('mrc_settings');
-      if(!s) return;
-      try{
-        const { apiUrl, token } = JSON.parse(s);
-        if(apiUrl) apiUrlEl.value = apiUrl;
-        if(token)  tokenEl.value  = token;
-      }catch(_){}
-    }
-    function saveSettings(){
-      const value = JSON.stringify({ apiUrl: apiUrlEl.value.trim(), token: tokenEl.value.trim() });
-      localStorage.setItem('mrc_settings', value);
-      saveMsg.textContent = '保存しました。';
-      setTimeout(()=> saveMsg.textContent = '', 2000);
-    }
-    function clearSettings(){
-      localStorage.removeItem('mrc_settings');
-      tokenEl.value = '';
-      saveMsg.textContent = '削除しました。';
-      setTimeout(()=> saveMsg.textContent = '', 2000);
-    }
-    $('#saveSettings').addEventListener('click', saveSettings);
-    $('#clearSettings').addEventListener('click', clearSettings);
-    loadSettings();
+  <!-- ブックマークレット -->
+  <section>
+    <h2>ブックマークレット（任意）</h2>
+    <p class="muted">このページの URL を自動指定し、<b>HTML＋設定</b>を渡します（初回も自動保存）。</p>
+    <div class="row">
+      <label>あなたのページ</label>
+      <input id="destUrl" type="url" />
+    </div>
+    <div class="btns">
+      <button id="genBM">ブックマークレットを生成</button>
+      <button id="copyBM" class="subtle">コードをコピー</button>
+    </div>
+    <textarea id="bmCode" class="mono" placeholder="ここにコードが出ます"></textarea>
+  </section>
 
-    /********** 解析ロジック **********/
-    function parseMaimaiHtml(html) {
-      // ★必要に応じてここをあなたの既存ロジックに差し替えてOK
-      const doc = new DOMParser().parseFromString(html, 'text/html');
-      const items = [];
+<script>
+/* ========== ユーティリティ & 保存 ========== */
+const $ = (sel) => document.querySelector(sel);
+const els = {
+  api:   $('#apiUrlInput'),
+  tok:   $('#apiTokenInput'),
+  url:   $('#sourceUrl'),
+  html:  $('#htmlInput'),
+  rbody: $('#resultsBody'),
+  pstat: $('#parseStatus'),
+  sstat: $('#sendStatus'),
+  dest:  $('#destUrl'),
+  bm:    $('#bmCode'),
+};
 
-      // できるだけ多くのレイアウトに当たる“ゆるめ”の探索
-      // 各カードっぽい要素を拾う
-      const candidates =
-        Array.from(doc.querySelectorAll('.playlog, .record, .box, section, article, div'))
-          .filter(el => /ACHIEVEMENT|TRACK|S[SP]{0,2}\+?|MASTER|BASIC|EXPERT|ADVANCED/i.test(el.textContent||''))
-          .slice(0, 50);
+const store = {
+  get api()   { return localStorage.getItem('apiUrl')   || ''; },
+  set api(v)  { localStorage.setItem('apiUrl',   v||''); },
+  get token() { return localStorage.getItem('apiToken') || ''; },
+  set token(v){ localStorage.setItem('apiToken', v||''); },
+};
 
-      for (const el of candidates) {
-        // タイトル候補
-        let title =
-          (el.querySelector('.music_name,.music-title,.playlog_music_title')||{}).textContent
-          || (el.querySelector('input[type="text"][value]')||{}).value
-          || (el.querySelector('h3,h4,header strong')||{}).textContent
-          || '';
+function hydrateUIFromStore() {
+  if (els.api) els.api.value = store.api;
+  if (els.tok) els.tok.value = store.token;
+}
 
-        title = (title||'').trim().replace(/\s+/g,' ');
-        if (!title) continue;
-
-        // レート（%）
-        let rateText = '';
-        const rateNode = el.querySelector('.rate,.achievement,.achi,.percent');
-        if (rateNode) rateText = rateNode.textContent;
-        if (!rateText) {
-          const m = (el.textContent||'').match(/(\d{2,3}\.\d{3})\s*%/);
-          if (m) rateText = m[1];
+/* ========== window.name / #fragment 受け取り ========== */
+(function receiveFromBookmarkOrHash() {
+  // 1) window.name (MAI:BASE64(JSON))
+  try {
+    if (window.name && window.name.startsWith('MAI:')) {
+      const json = decodeURIComponent(escape(atob(window.name.slice(4))));
+      const payload = JSON.parse(json);
+      if (payload) {
+        if (payload.config) {
+          if (payload.config.api)   store.api   = payload.config.api;
+          if (payload.config.token) store.token = payload.config.token;
         }
-        const rate = rateText ? Number(rateText.replace(/[^\d.]/g,'')) : null;
-
-        // プレイ日時
-        let playedAt = '';
-        const dateNode = el.querySelector('.date,.playedAt,.time,.played_date');
-        if (dateNode) playedAt = dateNode.textContent;
-        if (!playedAt) {
-          const m = (el.textContent||'').match(/(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2})/);
-          if (m) playedAt = m[1];
-        }
-        playedAt = (playedAt||'').trim();
-
-        items.push({ title, rate, playedAt });
+        if (payload.sourceUrl && els.url)  els.url.value  = payload.sourceUrl;
+        if (payload.html && els.html)      els.html.value = payload.html;
       }
-
-      // 何も取れない場合はページ全体から1件でも拾う
-      if (!items.length) {
-        const mTitle = (doc.body.textContent||'').match(/["“”'‘’]?([\w\s\-\!\?\&\.\u3000-\u30ff\u4e00-\u9faf]{3,})["“”'‘’]?\s+ACHIEVEMENT/i);
-        const mRate  = (doc.body.textContent||'').match(/(\d{2,3}\.\d{3})\s*%/);
-        const mDate  = (doc.body.textContent||'').match(/(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2})/);
-        if (mTitle || mRate || mDate) {
-          items.push({
-            title: (mTitle?mTitle[1]:'(unknown)').trim(),
-            rate:  mRate?Number(mRate[1]):null,
-            playedAt: mDate?mDate[1]:''
-          });
-        }
-      }
-
-      return items;
+      window.name = ''; // 消しておく
     }
+  } catch(e){ console.error(e); }
 
-    function renderResults(items){
-      if (!items || !items.length){
-        resultWrap.innerHTML = '<span class="muted">解析結果が空でした。</span>';
-        sendBtn.disabled = true;
-        return;
-      }
-      let html = `<div class="muted">${items.length}件解析しました。</div>
-      <table><thead><tr><th>#</th><th>Title</th><th>Rate</th><th>PlayedAt</th></tr></thead><tbody>`;
-      items.forEach((it, i)=>{
-        html += `<tr>
-          <td>${i+1}</td>
-          <td>${escapeHtml(it.title||'')}</td>
-          <td>${it.rate!=null ? it.rate.toFixed(3)+'%' : '-'}</td>
-          <td>${escapeHtml(it.playedAt||'')}</td>
-        </tr>`;
-      });
-      html += `</tbody></table>`;
-      resultWrap.innerHTML = html;
-      sendBtn.disabled = false;
+  // 2) URLフラグメント #api=...&token=... → 保存 & アドレスバーから除去
+  try {
+    if (location.hash && location.hash.includes('=')) {
+      const params = new URLSearchParams(location.hash.slice(1));
+      const api   = params.get('api');
+      const token = params.get('token');
+      if (api)   store.api   = api;
+      if (token) store.token = token;
+      history.replaceState({}, '', location.pathname);
     }
+  } catch(e){ console.error(e); }
 
-    function escapeHtml(s){
-      return String(s).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-    }
+  // ストア → UI
+  hydrateUIFromStore();
+})();
 
-    analyzeBtn.addEventListener('click', ()=>{
-      parseMsg.textContent = '';
-      const raw = htmlEl.value.trim();
-      if(!raw){ parseMsg.textContent = 'HTMLが空です。'; return; }
-      try{
-        const items = parseMaimaiHtml(raw);
-        renderResults(items);
-      }catch(e){
-        console.error(e);
-        parseMsg.textContent = '解析エラー: ' + e.message;
-      }
+/* ========== API 設定ボタン ========== */
+$('#saveCfgBtn')?.addEventListener('click', () => {
+  store.api   = els.api.value.trim();
+  store.token = els.tok.value.trim();
+  alert('保存しました');
+});
+$('#clearCfgBtn')?.addEventListener('click', () => {
+  if (!confirm('保存済みの API URL / Token を削除しますか？')) return;
+  store.api = ''; store.token = '';
+  hydrateUIFromStore();
+  alert('削除しました');
+});
+
+/* ========== 解析 ========== */
+$('#clearInputBtn')?.addEventListener('click', () => {
+  els.html.value = ''; els.url.value = '';
+  els.pstat.textContent = '';
+  els.rbody.innerHTML = '<tr><td colspan="5" class="muted">まだ結果はありません。</td></tr>';
+});
+
+$('#analyzeBtn')?.addEventListener('click', () => {
+  const html = els.html.value;
+  if (!html.trim()) { els.pstat.textContent = 'HTMLが空です。'; return; }
+  const items = parseMaimai(html, els.url.value.trim());
+  renderResults(items);
+});
+
+/* ざっくりパーサ：タイトル／達成率／日時をできるだけ拾う */
+function parseMaimai(html, href) {
+  const dom = new DOMParser().parseFromString(html, 'text/html');
+
+  // タイトル候補
+  const title =
+    dom.querySelector('.h_ach1')?.textContent?.trim() ||
+    dom.querySelector('.music_name, .muzukashi-name, .name, .musicName')?.textContent?.trim() ||
+    dom.querySelector('input[type="text"][value]')?.getAttribute('value')?.trim() ||
+    dom.title?.trim() || '';
+
+  // 達成率候補（% を含む数値を拾う）
+  let rate = '';
+  const textAll = dom.body ? dom.body.textContent : '';
+  const m = textAll && textAll.match(/(\d{1,3}\.\d{2,5})\s*%/);
+  if (m) rate = m[1];
+
+  // 日時候補
+  const playedAt =
+    dom.querySelector('.play_datalist .date, .date, time, .playedAt')?.textContent?.trim() || '';
+
+  const item = { title, rate, playedAt, href: href || '' };
+  return [item];
+}
+
+function renderResults(items) {
+  if (!items || !items.length) {
+    els.rbody.innerHTML = '<tr><td colspan="5" class="muted">解析できませんでした。</td></tr>';
+    els.pstat.textContent = '解析失敗';
+    return;
+  }
+  els.rbody.innerHTML = items.map((it, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td>${escapeHtml(it.title||'')}</td>
+      <td class="mono">${escapeHtml(it.rate||'')}</td>
+      <td class="mono">${escapeHtml(it.playedAt||'')}</td>
+      <td class="mono">${it.href ? `<a href="${it.href}" target="_blank" rel="noopener">link</a>` : ''}</td>
+    </tr>
+  `).join('');
+  els.pstat.innerHTML = `<span class="ok">解析OK</span> ${items.length}件`;
+}
+function escapeHtml(s){ return (s||'').replace(/[&<>"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
+
+/* ========== API 送信 ========== */
+$('#sendBtn')?.addEventListener('click', async () => {
+  const rows = [...els.rbody.querySelectorAll('tr')];
+  if (!rows.length || rows[0].querySelector('.muted')) {
+    els.sstat.textContent = '送信するデータがありません。';
+    return;
+  }
+  const api = store.api.trim();
+  if (!api) { els.sstat.textContent = 'API URL が未設定です。'; return; }
+
+  // テーブル → アイテム
+  const items = [...rows].map((tr) => {
+    const tds = tr.querySelectorAll('td');
+    return {
+      title:    tds[1]?.textContent?.trim() || '',
+      rate:     tds[2]?.textContent?.trim() || '',
+      playedAt: tds[3]?.textContent?.trim() || '',
+      href:     (tds[4]?.querySelector('a')?.href) || ''
+    };
+  });
+
+  els.sstat.textContent = '送信中…';
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (store.token) headers['Authorization'] = `Bearer ${store.token}`;
+    const res = await fetch(api, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ items })
     });
+    const text = await res.text().catch(()=> '');
+    if (!res.ok) throw new Error(text || (`HTTP ${res.status}`));
+    els.sstat.innerHTML = `<span class="ok">送信OK</span> ${escapeHtml(text)}`;
+  } catch (e) {
+    els.sstat.innerHTML = `<span class="err">送信エラー：${escapeHtml(String(e.message||e))}</span>`;
+  }
+});
 
-    /********** API 送信 **********/
-    sendBtn.addEventListener('click', async ()=>{
-      apiMsg.textContent = '';
-      const apiUrl = apiUrlEl.value.trim();
-      if(!apiUrl){ apiMsg.textContent = 'API URL が未設定です。'; return; }
-      // 直前の描画から再収集（簡易）
-      const items = Array.from(resultWrap.querySelectorAll('tbody tr')).map(tr=>{
-        const tds = tr.querySelectorAll('td');
-        return {
-          title: tds[1].textContent.trim(),
-          rate:  (tds[2].textContent.replace('%','')||'').trim()? Number(tds[2].textContent.replace('%','')): null,
-          playedAt: tds[3].textContent.trim()
-        };
-      });
-      if(!items.length){ apiMsg.textContent = '送信対象がありません。'; return; }
+/* ========== ブックマークレット生成 ========== */
+function currentDest() {
+  // いま開いている index.html のURL（#は除去）
+  return location.origin + location.pathname.replace(/index\.html?$/i,'');
+}
+function buildBookmarklet(destUrl, api, token) {
+  const DEST  = destUrl.endsWith('/') ? destUrl : (destUrl + '/');
+  const A     = api   ? `'${api.replace(/'/g,"\\'")}'`   : "''";
+  const T     = token ? `'${token.replace(/'/g,"\\'")}'` : "''";
+  return `javascript:(()=>{try{
+const DEST='${DEST}';const API=${A};const TOKEN=${T};
+const payload={html:document.documentElement.outerHTML,sourceUrl:location.href,config:{api:API,token:TOKEN}};
+window.name='MAI:'+btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+const frag=new URLSearchParams(); if(API)frag.set('api',API); if(TOKEN)frag.set('token',TOKEN);
+location.href=DEST+(frag.toString()?('#'+frag.toString()):'');
+}catch(e){alert('Bookmarklet error: '+(e&&e.message?e.message:e));}})();`;
+}
+function setDefaultDest() { els.dest.value = currentDest(); }
+setDefaultDest();
 
-      const body = { sourceUrl: srcEl.value.trim()||null, items };
-      const headers = { 'Content-Type':'application/json' };
-      const token = tokenEl.value.trim();
-      if (token) headers['Authorization'] = 'Bearer ' + token;
+$('#genBM')?.addEventListener('click', () => {
+  const code = buildBookmarklet(els.dest.value.trim() || currentDest(), store.api, store.token);
+  els.bm.value = code;
+});
+$('#copyBM')?.addEventListener('click', async () => {
+  if (!els.bm.value) { const code = buildBookmarklet(els.dest.value.trim() || currentDest(), store.api, store.token); els.bm.value = code; }
+  try { await navigator.clipboard.writeText(els.bm.value); alert('コピーしました'); }
+  catch { els.bm.select(); document.execCommand('copy'); alert('コピーしました（互換）'); }
+});
 
-      try{
-        const res = await fetch(apiUrl, { method:'POST', headers, body: JSON.stringify(body) });
-        const txt = await res.text();
-        apiMsg.innerHTML = res.ok ? `<span class="ok">OK</span> ${escapeHtml(txt)}` : `<span class="err">HTTP ${res.status}</span> ${escapeHtml(txt)}`;
-      }catch(e){
-        apiMsg.innerHTML = `<span class="err">送信失敗:</span> ${escapeHtml(e.message)}`;
-      }
-    });
-
-    /********** ブックマークレット生成 **********/
-    function makeBookmarklet(){
-      const dest = location.origin + location.pathname.replace(/index\.html?$/,'');
-      const url = dest.endsWith('/')? dest : dest + '/';
-      const code = `
-javascript:(()=>{try{const DEST='${url}';const data={html:document.documentElement.outerHTML,sourceUrl:location.href};window.name='MAI:'+btoa(unescape(encodeURIComponent(JSON.stringify(data))));location.href=DEST;}catch(e){alert('Bookmarklet error: '+(e&&e.message?e.message:e));}})();
-`.trim();
-      return code;
-    }
-    const bm = makeBookmarklet();
-    $('#bmCode').textContent = bm;
-    $('#copyBm').addEventListener('click', async ()=>{
-      try{ await navigator.clipboard.writeText(bm); $('#copyBm').textContent='コピーしました'; setTimeout(()=>{$('#copyBm').textContent='コードをコピー'},1500);}catch(_){}
-    });
-
-    /********** 受信（ブックマークレットから自動貼り付け&解析） **********/
-    (function () {
-      function decodePayload(b64) {
-        try { return decodeURIComponent(escape(atob(b64))); } catch (_) { return atob(b64); }
-      }
-      function run() {
-        try {
-          const PREFIX = 'MAI:';
-          if (!window.name || typeof window.name !== 'string' || !window.name.startsWith(PREFIX)) return;
-
-          // 受け取り → 復号 → JSON化
-          const json = decodePayload(window.name.slice(PREFIX.length));
-          const payload = JSON.parse(json || '{}');  // { html, sourceUrl }
-
-          // 再訪時の誤動作防止
-          window.name = '';
-
-          if (payload.sourceUrl) { srcEl.value = payload.sourceUrl; }
-          if (payload.html)      { htmlEl.value = payload.html; htmlEl.dispatchEvent(new Event('input', {bubbles:true})); }
-
-          // 自動で解析まで
-          if (payload.html) analyzeBtn.click();
-        } catch (e) {
-          console.error(e);
-          alert('受信処理でエラー: ' + e.message);
-        }
-      }
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => setTimeout(run, 0));
-      } else {
-        setTimeout(run, 0);
-      }
-    })();
-  </script>
+/* ========== 初期UI反映（ロード時） ========== */
+document.addEventListener('DOMContentLoaded', ()=> {
+  hydrateUIFromStore();
+});
+</script>
 </body>
 </html>
