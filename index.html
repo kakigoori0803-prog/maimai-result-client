@@ -1,324 +1,158 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>maimai Result Client (β)</title>
-  <style>
-    :root{
-      --bg:#0f1216;--panel:#151a21;--text:#eef3f8;--muted:#9aa7b5;
-      --accent:#35d0c8;--accent-2:#ff9a3c;--danger:#ff5d5d;--code:#0b0f14;
-      --bd:#2a3440;
-    }
-    html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic UI","Yu Gothic","Meiryo",sans-serif;}
-    .wrap{max-width:980px;margin:24px auto;padding:0 16px 80px;}
-    h1{font-size:28px;margin:0 0 12px;}
-    .lead{color:var(--muted);margin:8px 0 24px;font-size:14px}
-    section{background:var(--panel);border:1px solid var(--bd);border-radius:14px;padding:16px 16px 18px;margin:18px 0;}
-    section h2{margin:0 0 12px;font-size:20px}
-    .row{display:grid;grid-template-columns:140px 1fr;gap:10px 14px;align-items:center;margin:10px 0}
-    .row label{color:var(--muted);}
-    input[type="text"],input[type="url"],textarea{
-      width:100%;background:#0f141a;color:var(--text);border:1px solid var(--bd);
-      border-radius:10px;padding:12px 12px;font-size:15px;outline:none;
-    }
-    textarea{min-height:260px;resize:vertical;line-height:1.5}
-    .btn{
-      display:inline-flex;gap:8px;align-items:center;justify-content:center;
-      background:var(--accent);color:#002a28;border:0;border-radius:999px;
-      padding:12px 16px;font-weight:700;cursor:pointer;transition:.15s;
-    }
-    .btn:hover{filter:brightness(1.05)}
-    .btn.sec{background:#263244;color:var(--text)}
-    .btn.warn{background:var(--danger);color:#fff}
-    .hint{background:#1b2230;border:1px dashed var(--bd);color:var(--muted);
-      padding:10px 12px;border-radius:10px;font-size:13px}
-    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
-    pre{background:var(--code);border:1px solid var(--bd);color:#bcd3e0;padding:12px;border-radius:10px;overflow:auto}
-    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#243140;color:var(--muted);font-size:12px}
-    .right{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
-    .copy{user-select:all}
-    .small{font-size:12px;color:var(--muted)}
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>maimai Result Client (β)</title>
+<style>
+ body{background:#0b0f12;color:#e6edf3;font-family:system-ui,-apple-system,Segoe UI,Roboto,Noto Sans JP,Helvetica,Arial,sans-serif;line-height:1.6;margin:0}
+ .wrap{max-width:900px;margin:32px auto;padding:0 16px}
+ h1{font-size:28px;margin:20px 0}
+ .card{background:#12171c;border:1px solid #1f2831;border-radius:12px;padding:16px;margin:16px 0}
+ label{display:block;font-size:14px;margin:8px 0 6px;color:#9fb3c8}
+ input[type=text],textarea{width:100%;background:#0e141a;border:1px solid #27323d;border-radius:10px;color:#e6edf3;padding:12px 14px;font-size:15px;box-sizing:border-box}
+ textarea{min-height:240px;white-space:pre-wrap}
+ .row{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+ .btn{cursor:pointer;border:1px solid #2a8; background:#1aa4a4;color:#fff;border-radius:999px;padding:10px 16px;font-weight:700}
+ .btn.sec{background:#26313c;border-color:#364656}
+ .pill{display:inline-block;background:#1e2630;color:#9fb3c8;border:1px solid #2b3947;border-radius:999px;padding:4px 10px;margin-right:6px}
+ .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+ .ok{color:#3bd67f}.warn{color:#f6d365}.err{color:#ff6b6b}
+ .small{font-size:12px;color:#9fb3c8}
+ .hr{height:1px;background:#1f2831;margin:16px 0}
+</style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>maimai Result Client <span class="pill">β</span></h1>
-    <p class="lead">① まいまい履歴 <strong>HTML を渡す</strong>（ブックマークレット推奨） → ② <strong>解析</strong> → ③ <strong>API 送信</strong>（設定 &amp; ユーザーIDは自動）</p>
+<div class="wrap">
+  <h1>maimai Result Client (β)</h1>
 
-    <!-- ユーザーID -->
-    <section>
-      <h2>ユーザーID</h2>
-      <div class="row">
-        <label>あなたのID（自動）</label>
-        <input id="userId" type="text" readonly class="mono" />
-      </div>
-      <div class="row">
-        <label>Sync Code（任意）</label>
-        <input id="syncCode" type="text" placeholder="複数端末で同じIDに" class="mono" />
-      </div>
-      <div class="right">
-        <button id="saveSync" class="btn sec">Sync Code を保存</button>
-        <button id="clearSync" class="btn warn">削除</button>
-      </div>
-      <p class="small">※未入力の端末では自動ID（UUID）を使います。端末間で共有したい場合は上の Sync Code を利用してください。</p>
-    </section>
-
-    <!-- HTML 貼り付け -->
-    <section>
-      <h2>HTML 貼り付け</h2>
-      <div class="row">
-        <label>元ページURL</label>
-        <input id="srcUrl" type="url" placeholder="https://maimaidx.jp/..." class="mono" />
-      </div>
-
-      <div class="hint" style="margin:10px 0">
-        履歴一覧 <span class="mono">/maimai-mobile/record/</span> でも、各曲の詳細 <span class="mono">/playlogDetail/</span> でもOK。<br>
-        ブックマークレットを使うと <strong>URL と HTML は自動入力</strong>されます。
-      </div>
-
-      <textarea id="html" placeholder="ここに maimai のプレイ履歴ページの HTML 全体を貼り付け"></textarea>
-
-      <div class="right" style="margin-top:12px">
-        <button id="checkBtn" class="btn sec">内容チェック（簡易）</button>
-        <button id="sendBtn" class="btn">API へ送信</button>
-      </div>
-
-      <pre id="result" class="mono" style="margin-top:12px;display:none"></pre>
-    </section>
-
-    <!-- API 設定（自動） -->
-    <section>
-      <h2>現在のAPI設定（自動）</h2>
-      <div class="row">
-        <label>API URL</label>
-        <input id="apiUrl" type="url" class="mono" />
-      </div>
-      <div class="row">
-        <label>Bearer Token</label>
-        <input id="apiToken" type="text" class="mono" />
-      </div>
-      <div class="right">
-        <button id="saveApi" class="btn sec">設定を保存</button>
-        <button id="clearApi" class="btn warn">保存した設定を削除</button>
-      </div>
-      <p class="small">※初回は自動保存（localStorage）。配布先でも入力不要で使えます。</p>
-    </section>
-
-    <!-- ブックマークレット -->
-    <section>
-      <h2>ブックマークレット（配布）</h2>
-      <p class="small">下のボタンで <strong>ブックマークレットURL</strong> をコピー → Safari で新規ブックマークに URL として貼り付けてください。</p>
-      <div class="row">
-        <label>URL</label>
-        <input id="bmUrl" type="text" class="mono copy" readonly />
-      </div>
-      <div class="right">
-        <button id="copyBm" class="btn">ブックマークレットをコピー</button>
-      </div>
-    </section>
-
-    <p class="small">© 2025</p>
+  <div class="card">
+    <div class="pill" id="badge">待機中</div>
+    <span class="small">① まいまい履歴 HTML を渡す（ブックマーク推奨） → ② 確認 → ③ API送信</span>
   </div>
 
-  <!-- ===== 受信（window.name / postMessage 両対応） ===== -->
-  <script>
-  (function () {
-    function fillIntoForm(html, url) {
-      const urlInput = document.getElementById('srcUrl');
-      const htmlArea = document.getElementById('html');
-      if (url && urlInput) {
-        urlInput.value = url;
-        urlInput.dispatchEvent(new Event('input'));
-        urlInput.dispatchEvent(new Event('change'));
-      }
-      if (html && htmlArea) {
-        htmlArea.value = html;
-        htmlArea.dispatchEvent(new Event('input'));
-        htmlArea.dispatchEvent(new Event('change'));
-      }
-      try { (urlInput || htmlArea)?.closest('section')?.scrollIntoView({behavior:'smooth'}); } catch(_) {}
-    }
+  <div class="card">
+    <label>あなたのユーザーID（自動生成）</label>
+    <div class="row">
+      <input id="uid" type="text" readonly>
+      <button class="btn sec" id="regen">再生成</button>
+    </div>
+  </div>
 
-    // 1) window.name 方式（同一タブ遷移）
+  <div class="card">
+    <label>元ページURL（ブックマークレット経由で自動入力）</label>
+    <input id="srcUrl" type="text" placeholder="https://maimaidx.jp/...">
+    <div class="small" style="margin-top:6px">履歴一覧 <code class="mono">/maimai-mobile/record/</code> でも、各曲の詳細 <code class="mono">/playlogDetail/</code> でもOK。ブックマークレットを使うと <b>URL と HTML が自動入力</b>されます。</div>
+    <div class="hr"></div>
+    <label>ここに maimai のプレイ履歴ページの HTML 全体を貼り付け（ブックマーク実行なら自動）</label>
+    <textarea id="html"></textarea>
+    <div class="row">
+      <button class="btn sec" id="checkBtn">内容チェック（簡易）</button>
+      <button class="btn" id="sendBtn">API へ送信</button>
+    </div>
+    <pre id="log" class="mono" style="margin-top:12px"></pre>
+  </div>
+
+  <div class="card">
+    <label>現在のAPI設定（自動）</label>
+    <div class="mono small">API URL: <span id="apiUrlTxt"></span><br>Bearer Token: <span id="tokTxt"></span><br>※ 初回に自動保存（localStorage）。配布先でも入力不要で使えます。</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ====== 固定設定（公開してOKなトークン）======
+  const API_URL = 'https://maimai-result.onrender.com/ingest';
+  const PUBLIC_TOKEN = '677212069901c46a68a76e31ad8ba32a';
+
+  // ====== DOM ======
+  const $ = (s)=>document.querySelector(s);
+  const srcUrlEl = $('#srcUrl');
+  const htmlEl   = $('#html');
+  const logEl    = $('#log');
+  const badge    = $('#badge');
+  const uidEl    = $('#uid');
+  const apiUrlTxt= $('#apiUrlTxt');
+  const tokTxt   = $('#tokTxt');
+
+  // ====== ユーザーID（自動）======
+  const loadUid = () => localStorage.getItem('client_uid') || (localStorage.setItem('client_uid',crypto.randomUUID()), localStorage.getItem('client_uid'));
+  const setUid  = (v)=>{ localStorage.setItem('client_uid', v); uidEl.value=v; };
+  setUid(loadUid());
+  $('#regen').onclick = ()=> setUid(crypto.randomUUID());
+
+  // ====== API設定の自動保存 ======
+  localStorage.setItem('api_url', API_URL);
+  localStorage.setItem('api_token', PUBLIC_TOKEN);
+  apiUrlTxt.textContent = API_URL;
+  tokTxt.textContent    = PUBLIC_TOKEN.slice(0,6)+'…'+PUBLIC_TOKEN.slice(-4);
+
+  // ====== window.name 経由ペイロード受取（一覧・詳細どちらも対応）======
+  let batch = null; // [{url, html},...]
+  if (window.name && window.name.startsWith('MAI:')) {
     try {
-      if (window.name && window.name.startsWith('MAI:')) {
-        const json = decodeURIComponent(escape(atob(window.name.slice(4))));
-        const data = JSON.parse(json);
-        fillIntoForm(data.html, data.sourceUrl);
-        window.name = '';
+      const raw = window.name.slice(4);
+      const payload = JSON.parse(decodeURIComponent(escape(atob(raw))));
+      if (payload && Array.isArray(payload.items) && payload.items.length) {
+        batch = payload.items;
+        srcUrlEl.value = payload.listUrl || payload.items[0]?.url || '';
+        htmlEl.value = (payload.items[0]?.html || '');
+        badge.textContent = `受け取り: ${payload.items.length}件`;
+        badge.classList.add('ok');
       }
-    } catch (e) { console.error('[MAI client] window.name decode error:', e); }
-
-    // 2) postMessage 方式（別タブ→本ページ）
-    window.addEventListener('message', (ev) => {
-      const d = ev.data;
-      if (!d || d.type !== 'MAI_PAYLOAD' || !d.payload) return;
-      fillIntoForm(d.payload.html, d.payload.sourceUrl);
-    });
-
-    // 3) 目印（#bm）
-    if (location.hash === '#bm') {
-      console.log('[MAI client] waiting bookmarklet payload…');
+    } catch(e) {
+      console.warn(e);
+      badge.textContent = '受け取り失敗';
+      badge.classList.add('err');
+    } finally {
+      // もう使わないので消しておく
+      window.name = '';
     }
-  })();
-  </script>
-  <!-- ===== /受信 ===== -->
+  } else {
+    badge.textContent = '待機中';
+  }
 
-  <script>
-  (function(){
-    // ========= 定数（配布先でも自動セット） =========
-    const DEFAULT_API_URL = "https://maimai-result.onrender.com/ingest";
-    const DEFAULT_BEARER  = "677212069901c46a68a76e31ad8ba32a"; // 公開トークン
-    const LS = {
-      apiUrl   : "mai_api_url",
-      apiToken : "mai_api_token",
-      userId   : "mai_user_id",
-    };
+  // ====== 簡易チェック ======
+  $('#checkBtn').onclick = () => {
+    let count = 0;
+    if (batch && batch.length) count = batch.length;
+    else if ((htmlEl.value||'').trim()) count = 1;
+    logEl.textContent = `抽出対象の想定件数: ${count}\n（一覧なら件数>0になるはず。0 のときは一覧以外のページ or HTML未入力）`;
+  };
 
-    // ========= ユーティリティ =========
-    const $ = (id)=>document.getElementById(id);
-    const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
-    function uuidv4(){
-      // 簡易UUID
-      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){
-        const r=Math.random()*16|0,v=c==='x'?r:(r&0x3|0x8);return v.toString(16);
-      });
-    }
-    function maskToken(t){ if(!t) return ""; return t.length<=6?t: t.slice(0,6)+"…"+t.slice(-4); }
-    function appUrl(){
-      let u = window.location.origin + window.location.pathname;
-      if(!u.endsWith('/')) u += '/';
-      return u;
-    }
-
-    // ========= 初期化（localStorage 自動保存） =========
-    function ensureDefaults(){
-      if(!localStorage.getItem(LS.apiUrl))   localStorage.setItem(LS.apiUrl, DEFAULT_API_URL);
-      if(!localStorage.getItem(LS.apiToken)) localStorage.setItem(LS.apiToken, DEFAULT_BEARER);
-      if(!localStorage.getItem(LS.userId))   localStorage.setItem(LS.userId, uuidv4());
-    }
-
-    function refreshUi(){
-      // user id
-      $('userId').value = localStorage.getItem(LS.userId) || '';
-      // api
-      $('apiUrl').value   = localStorage.getItem(LS.apiUrl)   || '';
-      $('apiToken').value = localStorage.getItem(LS.apiToken) || '';
-      // bookmarklet
-      $('bmUrl').value = makeBookmarklet();
-    }
-
-    // ========= ブックマークレット生成 =========
-    function makeBookmarklet(){
-      const DEST = appUrl(); // このページ
-      const code = `(function(){try{const H=document.documentElement.outerHTML;const U=location.href;const D='${DEST}';const P={type:'MAI_PAYLOAD',payload:{html:H,sourceUrl:U}};var w=open(D+'#bm','_blank');if(w){setTimeout(function(){try{w.postMessage(P,'*')}catch(e){}},300)}else{window.name='MAI:'+btoa(unescape(encodeURIComponent(JSON.stringify(P.payload))));location.href=D}}catch(e){alert('Bookmarklet error: '+(e&&e.message?e.message:e))}})();`;
-      return "javascript:" + encodeURIComponent(code);
-    }
-
-    // ========= 送信処理 =========
-    async function sendToApi(){
-      const apiUrl   = localStorage.getItem(LS.apiUrl);
-      const apiToken = localStorage.getItem(LS.apiToken);
-      const userId   = localStorage.getItem(LS.userId);
-      const sourceUrl= $('srcUrl').value.trim();
-      const html     = $('html').value;
-
-      if(!apiUrl || !apiToken){ return showResult("API設定が未完です。", true); }
-      if(!html){ return showResult("HTML が空です。", true); }
-
-      const payload = { userId, sourceUrl, html };
-      showResult("Sending...\n" + JSON.stringify({apiUrl, userId, sourceUrl}, null, 2));
-
-      try{
-        const res = await fetch(apiUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + apiToken
-          },
-          body: JSON.stringify(payload)
-        });
-        const text = await res.text();
-        let body;
-        try{ body = JSON.parse(text); }catch{ body = text; }
-        showResult(`API status: ${res.status} (${res.ok?'OK':'NG'})\n---\n` + JSON.stringify(body, null, 2));
-      }catch(e){
-        showResult("送信失敗: " + (e && e.message ? e.message : e), true);
+  // ====== API送信 ======
+  $('#sendBtn').onclick = async () => {
+    try {
+      const uid = uidEl.value.trim();
+      let items = [];
+      if (batch && batch.length) {
+        items = batch;
+      } else {
+        const u = srcUrlEl.value.trim();
+        const h = htmlEl.value.trim();
+        if (!u || !h) { logEl.textContent='[ERROR] URL と HTML を入れてください。'; return; }
+        items = [{url:u, html:h}];
       }
+      logEl.textContent = '送信中…';
+
+      const body = JSON.stringify({ uid, items });
+      const res  = await fetch(API_URL, {
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'Authorization':'Bearer '+PUBLIC_TOKEN
+        },
+        body
+      });
+      const text = await res.text();
+      let pretty = text;
+      try { pretty = JSON.stringify(JSON.parse(text), null, 2) } catch{}
+      logEl.textContent = `API status: ${res.status} (${res.ok?'OK':'NG'})\n---\n${pretty}`;
+    } catch(e) {
+      logEl.textContent = '[ERROR] '+e;
     }
-
-    function showResult(text, isErr=false){
-      const pre = $('result');
-      pre.style.display = 'block';
-      pre.style.borderColor = isErr ? '#ff6b6b' : 'var(--bd)';
-      pre.textContent = text;
-    }
-
-    // ========= 簡易チェック =========
-    function quickCheck(){
-      const html = $('html').value;
-      if(!html){ return showResult("HTML が空です。", true); }
-      // ざっくり件数（TRやPLAYLOGなどのヒント）
-      const m1 = (html.match(/PLAYLOG|ACHIEVEMENT|TRACK/gi)||[]).length;
-      const m2 = (html.match(/playlogDetail/gi)||[]).length;
-      showResult(`ざっくりヒント\n- キーワード出現数: ${m1}\n- playlogDetail 出現: ${m2} 件\n- 文字数: ${html.length.toLocaleString()} 文字`);
-    }
-
-    // ========= イベント束ね =========
-    function bindEvents(){
-      // Sync
-      $('saveSync').addEventListener('click', ()=>{
-        const code = $('syncCode').value.trim();
-        if(!code){ alert('Sync Code を入力してください'); return; }
-        localStorage.setItem(LS.userId, code);
-        $('userId').value = code;
-        alert('保存しました');
-      });
-      $('clearSync').addEventListener('click', ()=>{
-        localStorage.setItem(LS.userId, uuidv4());
-        $('userId').value = localStorage.getItem(LS.userId);
-        $('syncCode').value = '';
-      });
-
-      // API
-      $('saveApi').addEventListener('click', ()=>{
-        const u = $('apiUrl').value.trim();
-        const t = $('apiToken').value.trim();
-        if(!u || !t){ alert('API URL と Token を入力してください'); return; }
-        localStorage.setItem(LS.apiUrl, u);
-        localStorage.setItem(LS.apiToken, t);
-        alert('保存しました');
-      });
-      $('clearApi').addEventListener('click', ()=>{
-        localStorage.removeItem(LS.apiUrl);
-        localStorage.removeItem(LS.apiToken);
-        ensureDefaults();
-        refreshUi();
-        alert('保存済み設定を削除し、デフォルトに戻しました');
-      });
-
-      // 送信・チェック
-      $('sendBtn').addEventListener('click', sendToApi);
-      $('checkBtn').addEventListener('click', quickCheck);
-
-      // BM コピー
-      $('copyBm').addEventListener('click', async ()=>{
-        try{
-          await navigator.clipboard.writeText($('bmUrl').value);
-          alert('コピーしました。ブックマークのURLに貼り付けてください。');
-        }catch(_){
-          $('bmUrl').select(); document.execCommand('copy');
-          alert('コピーしました（フォールバック）。');
-        }
-      });
-    }
-
-    // ========= 起動 =========
-    ensureDefaults();
-    bindEvents();
-    refreshUi();
-  })();
-  </script>
+  };
+})();
+</script>
 </body>
 </html>
