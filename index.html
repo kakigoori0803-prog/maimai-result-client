@@ -12,9 +12,7 @@
     header h1 { margin:0 0 6px; font-size:22px; }
     header .steps { opacity:.8; font-size:13px; }
     main { padding: 20px; max-width: 980px; margin: 0 auto; }
-
-    section { background:#141826; border:1px solid #222937; border-radius:12px; padding:18px;
-              margin: 0 0 18px; }
+    section { background:#141826; border:1px solid #222937; border-radius:12px; padding:18px; margin: 0 0 18px; }
     h2 { margin:0 0 14px; font-size:20px; }
     .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
     .grow { flex:1 1 auto; min-width: 260px; }
@@ -37,7 +35,7 @@
 <body>
   <header>
     <h1>maimai Result Client</h1>
-    <div class="steps">① まいまい履歴 HTML を渡す（<b>ブックマークレット推奨</b>） → ② 解析 → ③ API送信（<span class="muted">設定＆ユーザーIDは自動</span>）</div>
+    <div class="steps">① 履歴 or 詳細ページでブックマークレット実行 → ② 解析（<b>一覧は複数件</b>） → ③ API送信（<span class="muted">設定＆ユーザーIDは自動</span>）</div>
   </header>
   <main>
     <section id="sec-id">
@@ -55,7 +53,7 @@
           <button id="saveSync" class="btn secondary">Sync Code を保存</button>
         </div>
       </div>
-      <div class="hint">※未入力なら自動ID（UUID）を使います。端末間で共有したい場合のみ Sync Code を保存。</div>
+      <div class="hint">※未入力なら自動ID（UUID）を使います。端末間共有したいときのみ Sync Code を保存。</div>
     </section>
 
     <section id="sec-html">
@@ -66,13 +64,16 @@
           <input id="sourceUrl" class="mono" placeholder="https://maimaidx.jp/...">
         </div>
         <div>
-          <button id="fillWarn" class="btn warn">詳細ページで実行してね</button>
+          <button id="fillWarn" class="btn warn">ヒント</button>
         </div>
       </div>
-      <div class="hint">ここに <b>maimai のプレイ履歴「詳細」ページ</b>の HTML 全体を貼り付け（ブックマークレットなら自動で入ります）</div>
+      <div class="hint">
+        履歴一覧 <code>/maimai-mobile/record/</code> でも、各曲の詳細 <code>/playlogDetail/</code> でもOK。<br>
+        ブックマークレットなら HTML は自動入力されます。
+      </div>
       <textarea id="html"></textarea>
       <div class="row" style="margin-top:12px">
-        <button id="btnCheck" class="btn secondary">内容チェック（簡易）</button>
+        <button id="btnCheck" class="btn secondary">内容チェック</button>
         <button id="btnSend" class="btn">API へ送信</button>
       </div>
       <div id="checkOut" class="preview" style="margin-top:10px"></div>
@@ -91,14 +92,14 @@
           <div id="currTok" class="mono"></div>
         </div>
       </div>
-      <div class="hint">※ 初回に自動保存（localStorage）。配布先でも入力不要で使えます。</div>
+      <div class="hint">※ 初回に自動保存（localStorage）。配布先でも入力不要です。</div>
     </section>
   </main>
 
   <script>
-    // ====== 設定（配布時に埋め込み） ======
+    // ====== 固定設定（配布時に埋め込み） ======
     const DEFAULT_API_URL   = "https://maimai-result.onrender.com/ingest";
-    const DEFAULT_API_TOKEN = "677212069901c46a68a76e31ad8ba32a"; // 公開OKのトークン（ご提供の value）
+    const DEFAULT_API_TOKEN = "677212069901c46a68a76e31ad8ba32a";
 
     const LS_KEYS = {
       apiUrl:   "mrc.apiUrl",
@@ -109,103 +110,141 @@
 
     // ====== ユーティリティ ======
     const $ = (s)=>document.querySelector(s);
-    const fmt = (v)=>v==null?"":String(v);
     const uuid = ()=>crypto.randomUUID();
+    const fmt = (v)=>v==null?"":String(v);
 
     function initDefaults() {
-      if (!localStorage.getItem(LS_KEYS.apiUrl)) {
-        localStorage.setItem(LS_KEYS.apiUrl, DEFAULT_API_URL);
-      }
-      if (!localStorage.getItem(LS_KEYS.apiToken)) {
-        localStorage.setItem(LS_KEYS.apiToken, DEFAULT_API_TOKEN);
-      }
-      if (!localStorage.getItem(LS_KEYS.userId)) {
-        localStorage.setItem(LS_KEYS.userId, uuid());
-      }
+      if (!localStorage.getItem(LS_KEYS.apiUrl))   localStorage.setItem(LS_KEYS.apiUrl, DEFAULT_API_URL);
+      if (!localStorage.getItem(LS_KEYS.apiToken)) localStorage.setItem(LS_KEYS.apiToken, DEFAULT_API_TOKEN);
+      if (!localStorage.getItem(LS_KEYS.userId))   localStorage.setItem(LS_KEYS.userId, uuid());
     }
-
     function getApiConfig() {
       return {
-        url: localStorage.getItem(LS_KEYS.apiUrl) || DEFAULT_API_URL,
+        url: localStorage.getItem(LS_KEYS.apiUrl)   || DEFAULT_API_URL,
         token: localStorage.getItem(LS_KEYS.apiToken) || DEFAULT_API_TOKEN
       };
     }
-
     function getUserId() {
-      const sc = localStorage.getItem(LS_KEYS.syncCode);
-      return sc && sc.trim() ? sc.trim() : (localStorage.getItem(LS_KEYS.userId) || uuid());
+      const sc = (localStorage.getItem(LS_KEYS.syncCode)||"").trim();
+      return sc || localStorage.getItem(LS_KEYS.userId) || uuid();
     }
 
-    function b64DecodeSafe(b64) {
-      try { return decodeURIComponent(escape(atob(b64))); } catch { return atob(b64); }
-    }
-    function b64EncodeSafe(str) {
-      try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str); }
-    }
+    function b64DecodeSafe(b64) { try { return decodeURIComponent(escape(atob(b64))); } catch { return atob(b64); } }
+    function b64EncodeSafe(str)  { try { return btoa(unescape(encodeURIComponent(str))); } catch { return btoa(str); } }
 
-    // ====== 受け渡し（window.name） ======
+    // ====== 受け渡し取り込み ======
     function tryImportFromWindowName() {
       try {
         if (typeof window.name === "string" && window.name.startsWith("MAI:")) {
           const raw = window.name.slice(4);
           const obj = JSON.parse(b64DecodeSafe(raw));
-          if (obj && obj.html) {
-            $("#html").value = obj.html;
-          }
-          if (obj && obj.sourceUrl) {
-            $("#sourceUrl").value = obj.sourceUrl;
-          }
-          // 一度取り込んだら消しておく
+          if (obj && obj.html)      $("#html").value = obj.html;
+          if (obj && obj.sourceUrl) $("#sourceUrl").value = obj.sourceUrl;
           window.name = "";
-          // 自動チェック
-          setTimeout(() => $("#btnCheck").click(), 0);
+          setTimeout(()=>$("#btnCheck").click(),0);
         }
-      } catch (e) {
-        console.warn("window.name import failed:", e);
-      }
+      } catch(e) { console.warn(e); }
     }
 
-    // ====== 解析（簡易）— 詳細ページ1件想定 ======
-    function parseRecordFromDetail(html, sourceUrl) {
-      const dom = new DOMParser().parseFromString(html, "text/html");
-      // タイトル候補：入力欄 or よくあるクラス
-      const titleCandidates = [
-        'input[type="text"]',
-        '.music_title','.musicName','.play_musicdata_title','.playlog_top_title',
-        '#page .title','.data_title','.name','.song-name'
+    // ====== 共通：% 最大値・日時抽出 ======
+    function extractMaxPercent(text) {
+      const m = text.match(/(\d{1,3}(?:\.\d{1,4})?)%/g);
+      if (!m) return "";
+      let best = -1, out = "";
+      for (const s of m) { const v = parseFloat(s); if (!Number.isNaN(v) && v > best) { best=v; out=s; } }
+      return out;
+    }
+    function extractDateTime(text) {
+      const m = text.match(/20\d{2}\/\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}/);
+      return m ? m[0] : "";
+    }
+
+    // ====== 詳細ページ 1件抽出 ======
+    function parseRecordsFromDetail(html, sourceUrl) {
+      const dom = new DOMParser().parseFromString(html,"text/html");
+      const titleSel = [
+        'input[type="text"]','.music_title','.musicName','.play_musicdata_title',
+        '.playlog_top_title','#page .title','.data_title','.name','.song-name'
       ];
       let title = "";
-      for (const sel of titleCandidates) {
+      for (const sel of titleSel) {
         const el = dom.querySelector(sel);
-        if (el) {
-          title = (el.value ?? el.textContent ?? "").trim();
-          if (title) break;
-        }
+        if (el) { title = (el.value ?? el.textContent ?? "").trim(); if (title) break; }
       }
-      // 達成率（% を含む最大値を拾う）
-      let rate = "";
-      const txt = dom.body.textContent || "";
-      const mAll = txt.match(/(\d{1,3}(?:\.\d{1,4})?)%/g);
-      if (mAll && mAll.length) {
-        // 数字にして最大のものを採用（画面の大きい数字を想定）
-        let max = -1, pick = "";
-        for (const s of mAll) {
-          const n = parseFloat(s.replace("%",""));
-          if (!Number.isNaN(n) && n > max) { max = n; pick = s; }
-        }
-        rate = pick;
-      }
-      // 日付時刻
-      let playedAt = "";
-      const md = txt.match(/20\d{2}\/\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}/);
-      if (md) playedAt = md[0];
-
-      // 何も取れなければ空配列
+      const text = dom.body.textContent || "";
+      const rate = extractMaxPercent(text);
+      const playedAt = extractDateTime(text);
       if (!title && !rate && !playedAt) return [];
-      return [{
-        title, rate, playedAt,
-        href: sourceUrl || ""
-      }];
+      return [{ title, rate, playedAt, href: sourceUrl||"" }];
+    }
+
+    // ====== 履歴（一覧）複数件抽出 ======
+    function parseRecordsFromList(html, sourceUrl) {
+      const dom = new DOMParser().parseFromString(html,"text/html");
+      const results = [];
+
+      // 1) 「詳細」ボタン（a,button）を手掛かりに各ブロックを拾う
+      const detailBtns = Array.from(dom.querySelectorAll("a,button"))
+        .filter(el => (el.textContent||"").trim().includes("詳細"));
+
+      const containers = Array.from(new Set(detailBtns.map(b => {
+        // 近い大きめのコンテナを辿る
+        let p = b; for (let i=0;i<6 && p && p.parentElement;i++) p = p.parentElement;
+        return p || b.parentElement;
+      })));
+
+      for (const box of containers) {
+        // タイトル候補：ブロック内の input[type=text] か、見出し系
+        let title = "";
+        const inps = box.querySelectorAll('input[type="text"]');
+        if (inps.length) title = (inps[0].value||"").trim();
+        if (!title) {
+          const tEl = box.querySelector('.music_title,.musicName,.play_musicdata_title,.name,.song-name,.data_title,.title');
+          if (tEl) title = (tEl.textContent||"").trim();
+        }
+        // 達成率はブロック内テキストの最大%を採用
+        const txt = (box.textContent||"").replace(/\s+/g," ");
+        const rate = extractMaxPercent(txt);
+        const playedAt = extractDateTime(txt);
+
+        // それっぽいものだけ採用（タイトル or % がある）
+        if (title || rate) {
+          results.push({ title, rate, playedAt, href: sourceUrl||"" });
+        }
+      }
+
+      // 2) もし 0 件なら、保険として大枠からざっくり拾う
+      if (!results.length) {
+        const blocks = Array.from(dom.querySelectorAll("div,section,article"))
+          .filter(el => (el.textContent||"").includes("ACHIEVEMENT"));
+        for (const el of blocks) {
+          const txt = (el.textContent||"").replace(/\s+/g," ");
+          const rate = extractMaxPercent(txt);
+          const playedAt = extractDateTime(txt);
+          let title = "";
+          const tIn = el.querySelector('input[type="text"]');
+          if (tIn) title = (tIn.value||"").trim();
+          if (!title) {
+            const tEl = el.querySelector('.music_title,.musicName,.play_musicdata_title,.name,.song-name,.data_title,.title');
+            if (tEl) title = (tEl.textContent||"").trim();
+          }
+          if (title || rate) results.push({ title, rate, playedAt, href: sourceUrl||"" });
+        }
+      }
+      // 重複・空行整理
+      return results
+        .map(r => ({...r, title: (r.title||"").trim()}))
+        .filter((r,i,self)=> r.title || r.rate)
+        .filter((r,i,self)=> i===self.findIndex(x=>x.title===r.title && x.rate===r.rate && x.playedAt===r.playedAt));
+    }
+
+    // ====== 自動判定 ======
+    function parseAuto(html, sourceUrl) {
+      const u = sourceUrl||"";
+      if (u.includes("/playlogDetail/")) return parseRecordsFromDetail(html, sourceUrl);
+      if (u.includes("/maimai-mobile/record/")) return parseRecordsFromList(html, sourceUrl);
+      // 不明な場合は「詳細扱い」にフォールバック
+      return parseRecordsFromDetail(html, sourceUrl);
     }
 
     // ====== 画面：内容チェック ======
@@ -214,63 +253,42 @@
       const sourceUrl = $("#sourceUrl").value;
       const out = $("#checkOut");
       out.textContent = "";
-      if (!html.trim()) {
-        out.innerHTML = '<span class="ng">HTML が空です。</span> ブックマークレットで「詳細ページ」から来るのが楽です。';
-        return;
-      }
-      // 一覧ページ警告
-      if (sourceUrl.includes("/maimai-mobile/record/") && !sourceUrl.includes("playlogDetail")) {
-        alert("これは『一覧』のHTMLの可能性があります。\n曲の『詳細』ページでブックマークレットを実行してください。");
-      }
-      const recs = parseRecordFromDetail(html, sourceUrl);
+      if (!html.trim()) { out.innerHTML = '<span class="ng">HTML が空です。</span>'; return; }
+      const recs = parseAuto(html, sourceUrl);
       if (!recs.length) {
-        out.innerHTML = '<span class="ng">0 件でした。</span> 詳細ページで試してください。';
+        out.innerHTML = '<span class="ng">0 件でした。</span> 履歴一覧から取りこぼす場合は「詳細ページ」でもお試しください。';
         return;
       }
-      out.textContent =
-        `✔ 解析できた件数: ${recs.length}\n\n` +
-        JSON.stringify(recs, null, 2);
+      out.textContent = `解析できた件数: ${recs.length}\n\n` + JSON.stringify(recs,null,2);
     });
 
     // ====== API送信 ======
     async function sendToApi(records) {
       const {url, token} = getApiConfig();
-      const payload = {
-        userId: getUserId(),
-        records
-      };
+      const payload = { userId: getUserId(), records };
       const res = await fetch(url, {
         method: "POST",
         mode: "cors",
         headers: {
-          "Content-Type": "text/plain",        // プリフライト回避 & サーバ側で受理
+          "Content-Type": "text/plain",
           "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify(payload)
       });
       const text = await res.text();
-      let json = {};
-      try { json = JSON.parse(text); } catch { /* noop */ }
-      return { status: res.status, bodyText: text, bodyJson: json };
+      return { status: res.status, text };
     }
 
     $("#btnSend").addEventListener("click", async () => {
       const html = $("#html").value;
       const sourceUrl = $("#sourceUrl").value;
-      const out = $("#sendOut");
-      out.textContent = "";
-      const recs = parseRecordFromDetail(html, sourceUrl);
-      if (!recs.length) {
-        out.innerHTML = '<span class="ng">送信中止：</span> 解析結果が 0 件です。まず「内容チェック（簡易）」でご確認ください。';
-        return;
-      }
-      out.textContent = "送信中…";
+      const out = $("#sendOut"); out.textContent = "";
+      const recs = parseAuto(html, sourceUrl);
+      if (!recs.length) { out.innerHTML = '<span class="ng">送信中止：</span> 解析結果が 0 件です。'; return; }
+      out.textContent = `送信中… (${recs.length} 件)`;
       try {
         const r = await sendToApi(recs);
-        out.textContent =
-`API status: ${r.status}
----
-${r.bodyText}`;
+        out.textContent = `API status: ${r.status}\n---\n${r.text}`;
       } catch (e) {
         out.textContent = "送信失敗: " + (e && e.message ? e.message : String(e));
       }
@@ -285,23 +303,25 @@ ${r.bodyText}`;
       alert("保存しました。");
     });
 
-    // ====== 一覧ページ注意ボタン ======
+    // ====== ヒント ======
     $("#fillWarn").addEventListener("click", () => {
-      const src = $("#sourceUrl").value;
-      if (src && src.includes("/maimai-mobile/record/") && !src.includes("playlogDetail")) {
-        alert("『一覧』ではなく『詳細』ページで実行してください。");
+      const src = $("#sourceUrl").value||"";
+      if (src.includes("/playlogDetail/")) {
+        alert("詳細ページ → 1件を高精度で取得します。");
+      } else if (src.includes("/maimai-mobile/record/")) {
+        alert("履歴一覧 → 複数件を一気に取得します（タイトルや%が拾えない曲は取りこぼすことがあります）。");
       } else {
-        alert("ブックマークレットを『詳細』ページで実行すると自動入力されます。");
+        alert("履歴一覧 または 詳細ページでブックマークレットを実行すると楽です。");
       }
     });
 
     // ====== 初期化 ======
     initDefaults();
-    $("#userId").value = getUserId();
-    $("#syncCode").value = localStorage.getItem(LS_KEYS.syncCode) || "";
+    $("#userId").value   = getUserId();
+    $("#syncCode").value = localStorage.getItem(LS_KEYS.syncCode)||"";
     const api = getApiConfig();
     $("#currUrl").textContent = api.url;
-    $("#currTok").textContent = api.token.replace(/^(.{6}).+(.{4})$/, "$1…$2");
+    $("#currTok").textContent = api.token.replace(/^(.{6}).+(.{4})$/,"$1…$2");
     tryImportFromWindowName();
   </script>
 </body>
