@@ -1,68 +1,232 @@
 <!doctype html>
 <html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>maimai Result Client (β)</title>
-  <link rel="stylesheet" href="./style.css">
-</head>
-<body>
-  <header>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>maimai Result Client (β)</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans JP", sans-serif; margin: 24px; line-height: 1.6; }
+      h1 { margin: 0 0 16px; font-size: 20px; }
+      section { border: 1px solid #8883; border-radius: 10px; padding: 16px; margin: 16px 0; }
+      label { display: block; font-weight: 600; margin: 8px 0 4px; }
+      input[type="text"], input[type="password"], textarea {
+        width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #8885; font: inherit;
+      }
+      textarea { min-height: 200px; }
+      button {
+        appearance: none; border: none; border-radius: 999px; padding: 10px 16px;
+        background: #10b981; color: white; font-weight: 700; cursor: pointer;
+      }
+      button.secondary { background: #334155; }
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+      th, td { border-top: 1px solid #8883; padding: 8px; text-align: left; }
+      .row { display: grid; gap: 12px; grid-template-columns: 1fr; }
+      @media (min-width: 720px) { .row { grid-template-columns: 1fr 1fr; } }
+      .hint { font-size: 12px; opacity: .8; }
+      .ok { color: #059669; }
+      .ng { color: #dc2626; }
+      .toolbar { display:flex; gap:8px; flex-wrap:wrap; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    </style>
+  </head>
+  <body>
     <h1>maimai Result Client (β)</h1>
-    <p>① プレイ履歴ページの HTML を丸ごとコピペ → ② 解析 → ③ 必要ならAPI送信</p>
-  </header>
 
-  <section class="card">
-    <h2>API 設定（任意）</h2>
-    <label>API URL
-      <input id="apiUrl" type="url" placeholder="https://maimai-result.onrender.com/ingest">
-    </label>
-    <label>Bearer Token（あれば）
-      <input id="apiToken" type="text" placeholder="例: 12345...">
-    </label>
-    <button id="saveSettings">設定を保存</button>
-    <small>※端末ローカルに保存されます（localStorage）。</small>
-  </section>
+    <!-- API 設定 -->
+    <section>
+      <h2>API 設定（任意）</h2>
+      <label for="apiUrl">API URL</label>
+      <input id="apiUrl" type="text" placeholder="https://maimai-result.onrender.com/ingest" />
+      <label for="token">Bearer Token（あれば）</label>
+      <input id="token" type="password" placeholder="例: 12345..." />
+      <div class="toolbar" style="margin-top:10px">
+        <button id="saveSettings">設定を保存</button>
+        <button class="secondary" id="clearSettings">保存した設定を削除</button>
+      </div>
+      <div id="settingsStatus" class="hint"></div>
+    </section>
 
-  <section class="card">
-    <h2>HTML 貼り付け</h2>
-    <textarea id="htmlInput" rows="10" placeholder="プレイ履歴ページのソースやページ全体を貼り付け"></textarea>
-    <div class="row">
-      <button id="parseBtn">解析する</button>
-      <button id="clearBtn" class="ghost">消去</button>
-    </div>
-  </section>
+    <!-- HTML 貼り付け -->
+    <section>
+      <h2>HTML 貼り付け</h2>
+      <p class="hint">プレイ履歴ページのソースやページ全体を貼り付け</p>
+      <textarea id="htmlInput" placeholder="ここに maimai のプレイ履歴ページの HTML を貼り付け"></textarea>
+      <div class="toolbar" style="margin-top:10px">
+        <button id="analyze">解析する</button>
+        <button class="secondary" id="clearInput">クリア</button>
+      </div>
+      <div id="analyzeStatus" class="hint"></div>
+    </section>
 
-  <section class="card">
-    <h2>解析結果</h2>
-    <div id="resultInfo" class="muted">まだ結果はありません</div>
-    <table id="resultTable" class="hidden">
-      <thead>
-        <tr><th>#</th><th>Title</th><th>Rate</th><th>PlayedAt</th></tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-    <div class="row">
-      <button id="sendBtn" disabled>APIへ送信</button>
-      <span id="sendStatus" class="muted"></span>
-    </div>
-  </section>
+    <!-- 結果 -->
+    <section>
+      <h2>解析結果</h2>
+      <div class="toolbar">
+        <button id="sendApi">APIへ送信</button>
+      </div>
+      <div id="sendStatus" class="hint"></div>
+      <table id="resultTable">
+        <thead><tr><th>#</th><th>Title</th><th>Rate</th><th>PlayedAt</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
 
-  <section class="card">
-    <h2>ブックマークレット（任意）</h2>
-    <p>このページを開いたまま、下のボタンでコードをコピーしてブラウザの「ブックマークのURL」に貼り付けてください。</p>
-    <button id="copyBM">ブックマークレットをコピー</button>
-    <details>
-      <summary>中身を見る</summary>
-      <pre id="bmSource" class="code small"></pre>
-    </details>
-    <small>※初回実行時のみ API URL / Token を聞かれ、以降はブラウザに保存されます。</small>
-  </section>
+    <!-- ===== ここからが「追加ブロック」：window.nameを受け取り、自動貼り付け＆自動解析 ===== -->
+    <script>
+      (function () {
+        const MARKER = 'MAI:'; // ブックマークレットと一致させる合言葉
 
-  <footer>
-    <small>© You — Client-side app. Data is kept locally unless you choose to POST.</small>
-  </footer>
+        // --- 設定の保存 / 復元 ---
+        const apiUrlEl = document.getElementById('apiUrl');
+        const tokenEl  = document.getElementById('token');
+        const saveBtn  = document.getElementById('saveSettings');
+        const clearBtn = document.getElementById('clearSettings');
+        const settingsStatus = document.getElementById('settingsStatus');
 
-  <script src="./app.js"></script>
-</body>
+        function loadSettings() {
+          apiUrlEl.value = localStorage.getItem('apiUrl') || 'https://maimai-result.onrender.com/ingest';
+          tokenEl.value  = localStorage.getItem('bearerToken') || '';
+        }
+        function saveSettings() {
+          localStorage.setItem('apiUrl', apiUrlEl.value.trim());
+          localStorage.setItem('bearerToken', tokenEl.value.trim());
+          settingsStatus.textContent = '保存しました。';
+        }
+        function clearSettings() {
+          localStorage.removeItem('apiUrl');
+          localStorage.removeItem('bearerToken');
+          loadSettings();
+          settingsStatus.textContent = '保存内容を削除しました。';
+        }
+        saveBtn.addEventListener('click', saveSettings);
+        clearBtn.addEventListener('click', clearSettings);
+        loadSettings();
+
+        // --- HTML 解析（超ざっくり／例） ---
+        const htmlInput = document.getElementById('htmlInput');
+        const analyzeBtn = document.getElementById('analyze');
+        const clearInputBtn = document.getElementById('clearInput');
+        const analyzeStatus = document.getElementById('analyzeStatus');
+        const tbody = document.querySelector('#resultTable tbody');
+
+        let parsedItems = [];
+
+        function parseMaimaiHtml(html) {
+          const doc = new DOMParser().parseFromString(html, 'text/html');
+
+          // タイトル候補
+          const titleSel = [
+            '.music_name', '.music-title', '.title', '.musicName', '.h_ach1'
+          ];
+          // Rate 候補（%表記を拾う）
+          const rateSel  = [
+            '.achievement', '.rate', '.achieve', '.h_ach1'
+          ];
+          // 日時候補
+          const dateSel  = [
+            '.date', '.playedAt', '.play_datetime', '.time'
+          ];
+
+          function pickText(selectors) {
+            for (const s of selectors) {
+              const el = doc.querySelector(s);
+              if (el && el.textContent.trim()) return el.textContent.trim();
+            }
+            return '';
+          }
+
+          const title = pickText(titleSel);
+          let rate = pickText(rateSel);
+          // ページによってはタイトルと同じセレクタに Rate が入ることもあるので % を抽出
+          const rateMatch = (rate || doc.body.textContent).match(/(\d{1,3}\.\d{2,3})\s*%/);
+          rate = rateMatch ? rateMatch[1] : (rate || '').replace(/[^\d.]/g, '');
+
+          const playedAt = pickText(dateSel);
+
+          return (title || rate || playedAt) ? [{ title, rate, playedAt }] : [];
+        }
+
+        function render(items) {
+          tbody.innerHTML = '';
+          items.forEach((it, i) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${i+1}</td>
+                            <td class="mono">${(it.title||'').replace(/\s+/g,' ')}</td>
+                            <td>${it.rate || ''}</td>
+                            <td class="mono">${it.playedAt || ''}</td>`;
+            tbody.appendChild(tr);
+          });
+        }
+
+        analyzeBtn.addEventListener('click', () => {
+          parsedItems = parseMaimaiHtml(htmlInput.value || '');
+          render(parsedItems);
+          analyzeStatus.textContent = parsedItems.length ? `${parsedItems.length} 件解析しました。` : '解析できる要素が見つかりませんでした。';
+        });
+        clearInputBtn.addEventListener('click', () => {
+          htmlInput.value = '';
+          parsedItems = [];
+          render(parsedItems);
+          analyzeStatus.textContent = '';
+        });
+
+        // --- API 送信 ---
+        const sendBtn = document.getElementById('sendApi');
+        const sendStatus = document.getElementById('sendStatus');
+        sendBtn.addEventListener('click', async () => {
+          try {
+            const apiUrl = (apiUrlEl.value || '').trim();
+            if (!apiUrl) { sendStatus.textContent = 'API URL が設定されていません。'; return; }
+            if (!parsedItems.length) { sendStatus.textContent = '送信するデータがありません。先に解析してください。'; return; }
+
+            const res = await fetch(apiUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(tokenEl.value ? { 'Authorization': 'Bearer ' + tokenEl.value } : {})
+              },
+              body: JSON.stringify({
+                sourceUrl: location.href,
+                items: parsedItems
+              })
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(JSON.stringify(json) || res.statusText);
+            sendStatus.innerHTML = `<span class="ok">OK</span> 送信成功: ${JSON.stringify(json)}`;
+          } catch (e) {
+            sendStatus.innerHTML = `<span class="ng">NG</span> ${String(e)}`;
+          }
+        });
+
+        // ===== ブックマークレットからの受け取り（ここが今回の“自動化”本体） =====
+        function decodeFromWindowName() {
+          try {
+            if (!window.name || !window.name.startsWith(MARKER)) return null;
+            const b64 = window.name.slice(MARKER.length);
+            window.name = ''; // 再実行防止
+            const text = decodeURIComponent(escape(atob(b64)));
+            return JSON.parse(text); // { html, sourceUrl }
+          } catch (e) {
+            console.error('decode error', e);
+            return null;
+          }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+          const payload = decodeFromWindowName();
+          if (!payload) return; // 直アクセス時は何もしない
+
+          // 自動貼り付け
+          htmlInput.value = payload.html || '';
+          // 自動解析
+          analyzeBtn.click();
+        });
+      })();
+    </script>
+    <!-- ===== 追加ブロックおわり ===== -->
+  </body>
 </html>
