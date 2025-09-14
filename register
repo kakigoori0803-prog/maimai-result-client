@@ -1,0 +1,63 @@
+# server_register.py みたいなファイルに追加（既存 app に統合してOK）
+from fastapi import FastAPI, Header, HTTPException
+from pydantic import BaseModel
+from typing import Optional, Dict
+import secrets, time, json, os
+
+app = FastAPI()  # 既存の app を使うならこの行は不要
+
+TOKENS_PATH = "/data/mrc_tokens.json"  # RenderのDisk使用時
+MEM_DB: Dict[str, Dict] = {}           # Diskが無い場合のフォールバック
+
+def _load_tokens():
+    try:
+        if os.path.exists(TOKENS_PATH):
+            with open(TOKENS_PATH, "r") as f:
+                return json.load(f)
+    except:
+        pass
+    return {}
+
+def _save_tokens(store):
+    try:
+        os.makedirs(os.path.dirname(TOKENS_PATH), exist_ok=True)
+        with open(TOKENS_PATH, "w") as f:
+            json.dump(store, f)
+    except:
+        pass
+
+TOKENS = _load_tokens() or MEM_DB
+
+class RegisterReq(BaseModel):
+    device_id: Optional[str] = None
+
+class RegisterResp(BaseModel):
+    api_url: str
+    token: str
+    user_id: str
+
+@app.post("/register", response_model=RegisterResp)
+def register(req: RegisterReq):
+    # 1) デバイスIDが無ければ簡易発行（サーバー側でもバックアップ）
+    device_id = req.device_id or secrets.token_hex(16)
+
+    # 2) 既存トークンがあれば再利用、無ければ発行
+    #    「1デバイス=1トークン」を基本にします
+    for t, meta in TOKENS.items():
+        if meta.get("device_id") == device_id:
+            return RegisterResp(api_url="/ingest", token=t, user_id=device_id)
+
+    token = secrets.token_urlsafe(32)
+    TOKENS[token] = {"device_id": device_id, "created_at": int(time.time())}
+    _save_tokens(TOKENS)
+    return RegisterResp(api_url="/ingest", token=token, user_id=device_id)
+
+# 既存 /ingest の認証で以下のように判定を追加してください
+# Authorization: Bearer <token> が TOKENS に存在するかを確認
+# 例:
+# auth = request.headers.get("Authorization", "")
+# if not auth.startswith("Bearer "): raise HTTPException(401, "no auth")
+# token = auth.split(" ",1)[1]
+# if token not in TOKENS: raise HTTPException(401, "bad token")
+# user_id = TOKENS[token]["device_id"]
+# … user_id を使って保存 …
