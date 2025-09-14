@@ -1,253 +1,176 @@
-// loader.js — 履歴一覧/詳細をワンポチ収集 + 進捗UI + API送信（POST対応 & リトライ付き）
+// loader.js  — maimai Result Client (送信ランチャー)
+// © you. 配布前提: 自己責任。必要に応じてコメント/文言調整OK。
+
 (() => {
-  if (window.__maiClientRunning) return;
-  window.__maiClientRunning = true;
+  // === 設定（必要に応じて編集） ===
+  const CLIENT_URL = 'https://kakigoori0803-prog.github.io/maimai-result-client/';
+  const LS = {
+    apiUrl:  'mrc_api_url',
+    apiTok:  'mrc_api_token',
+    summary: 'mrc:lastIngestSummary',
+  };
+  // 既定値（localStorage 未設定時のフォールバック）
+  const DEFAULT_API_URL = 'https://maimai-result.onrender.com/ingest';
+  // 公開用トークン（配布前提で自動投入したい場合。配布先を信頼できないなら空にする）
+  const DEFAULT_BEARER   = '677212069901c46a68a76e31ad8ba32a'; // ←あなたの「value」
 
-  // ==== あなたの公開API設定 ====
-  const API_URL   = 'https://maimai-result.onrender.com/ingest';
-  const API_TOKEN = '677212069901c46a68a76e31ad8ba32a';
+  // === 便利関数 ===
+  const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
+  const qs = (sel,root=document)=>root.querySelector(sel);
+  const qsa = (sel,root=document)=>Array.from(root.querySelectorAll(sel));
 
-  // ==== 判定 ====
-  const isListPage   = () => /\/maimai-mobile\/record\/?(?:\?|$)/.test(location.pathname);
-  const isDetailPage = () => /\/maimai-mobile\/record\/playlogDetail\/?/.test(location.pathname);
-
-  // ==== 小物 ====
-  const sleep = ms => new Promise(r=>setTimeout(r,ms));
-  const rand  = (min,max)=> min + Math.random()*(max-min);
-
-  async function fetchTextGET(url){
-    const r = await fetch(url, {credentials:'same-origin'});
-    if(!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-    return await r.text();
-  }
-  async function fetchTextPOST(url, body){
-    const r = await fetch(url, {
-      method:'POST',
-      credentials:'same-origin',
-      headers:{'Content-Type':'application/x-www-form-urlencoded'},
-      body
-    });
-    if(!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-    return await r.text();
-  }
-  async function postIngest({html, sourceUrl, userId}){
-    const r = await fetch(API_URL, {
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'Authorization':`Bearer ${API_TOKEN}`
-      },
-      body: JSON.stringify({html, sourceUrl, userId})
-    });
-    if(!r.ok){
-      const t = await r.text().catch(()=> '');
-      throw new Error(`API ${r.status}: ${t}`);
-    }
-    return await r.json().catch(()=> ({}));
-  }
-  function userId(){
-    const K='__mai_user_id__';
-    let v=localStorage.getItem(K);
-    if(!v){ v=(crypto.randomUUID?.()||Date.now()+Math.random().toString(16).slice(2)); localStorage.setItem(K,v); }
-    return v;
+  // === API 設定を取得（localStorage > 既定） ===
+  function getApiConfig() {
+    const url = localStorage.getItem(LS.apiUrl) || DEFAULT_API_URL;
+    const tok = localStorage.getItem(LS.apiTok) || DEFAULT_BEARER;
+    return { url, token: tok };
   }
 
-  // ==== 進捗UI ====
-  const ui = (() => {
+  // === UI: オーバーレイ ===
+  function makeOverlay() {
     const wrap = document.createElement('div');
-    wrap.style.cssText = `
-      position:fixed;inset:0;z-index:2147483647;
-      display:flex;align-items:center;justify-content:center;
-      background:rgba(0,0,0,.35);backdrop-filter:blur(2px);
-      font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;`;
-    const box = document.createElement('div');
-    box.style.cssText = `
-      width:min(92vw,520px);background:#111;color:#fff;border-radius:12px;
-      box-shadow:0 8px 24px rgba(0,0,0,.45);padding:16px 18px;`;
-    const h = document.createElement('div');
-    h.textContent = 'maimai Result Client';
-    h.style.cssText = 'font-weight:700;font-size:16px;margin-bottom:8px;';
-    const msg = document.createElement('div');
-    msg.style.cssText = 'font-size:14px;line-height:1.5;white-space:pre-wrap;min-height:3em;';
-    const barWrap = document.createElement('div');
-    barWrap.style.cssText = 'height:8px;background:#333;border-radius:999px;overflow:hidden;margin-top:10px;';
-    const bar = document.createElement('div');
-    bar.style.cssText = 'height:100%;width:0%;background:#1dd1a1;transition:width .2s;';
-    barWrap.appendChild(bar);
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;gap:8px;margin-top:12px;justify-content:flex-end;';
-    const btnCancel = document.createElement('button');
-    btnCancel.textContent = '中止';
-    btnCancel.style.cssText = 'padding:8px 12px;border:0;border-radius:8px;background:#444;color:#fff;';
-    const btnClose = document.createElement('button');
-    btnClose.textContent = '閉じる';
-    btnClose.style.cssText = 'padding:8px 12px;border:0;border-radius:8px;background:#666;color:#fff;display:none;';
-    row.append(btnCancel, btnClose);
-    box.append(h,msg,barWrap,row); wrap.appendChild(box);
-
-    let onCancel = null;
-    btnCancel.onclick = () => onCancel && onCancel();
-    btnClose.onclick = () => document.body.contains(wrap) && document.body.removeChild(wrap);
-
+    wrap.id = 'mrc-overlay';
+    wrap.style.cssText =
+      'position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:2147483647;display:flex;align-items:center;justify-content:center;';
+    const dlg = document.createElement('div');
+    dlg.style.cssText =
+      'width:min(92vw,520px);background:#111;color:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.4);padding:18px 18px 12px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial;';
+    dlg.innerHTML = `
+      <div style="font-weight:700;font-size:18px;margin-bottom:8px;">maimai Result Client</div>
+      <div id="mrc-msg" style="opacity:.9;margin-bottom:10px;font-size:14px;">準備中…</div>
+      <div style="height:8px;background:#333;border-radius:999px;overflow:hidden;margin:6px 0 12px;">
+        <div id="mrc-bar" style="height:100%;width:0;background:#24d1b5;transition:width .15s;"></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="mrc-go" style="display:none;padding:8px 10px;border-radius:8px;border:0;background:#1f6feb;color:#fff">結果ページへ</button>
+        <button id="mrc-close" style="padding:8px 10px;border-radius:8px;border:0;background:#444;color:#fff">閉じる</button>
+      </div>
+    `;
+    wrap.appendChild(dlg);
+    document.body.appendChild(wrap);
     return {
-      mount(){ document.body.appendChild(wrap); },
-      setText(t){ msg.textContent = t; },
-      setProgress(cur,total){ bar.style.width = (total? Math.round(cur/total*100):0)+'%'; },
-      askConfirm(total,sec){
-        return new Promise(res=>{
-          msg.textContent = `履歴データ（${total}件）を取得します。\n概算 ${Math.ceil(sec)} 秒かかります。\n実行しますか？`;
-          const btnRun = document.createElement('button');
-          btnRun.textContent = '実行';
-          btnRun.style.cssText = 'padding:8px 12px;border:0;border-radius:8px;background:#1dd1a1;color:#000;font-weight:700;';
-          row.prepend(btnRun);
-          btnRun.onclick=()=>{btnRun.remove();res(true);};
-          btnCancel.onclick=()=>res(false);
-        });
+      wrap,
+      setMsg: (t)=> { qs('#mrc-msg', dlg).textContent = t; },
+      setBar: (p)=> { qs('#mrc-bar', dlg).style.width = `${Math.max(0,Math.min(100,p))}%`; },
+      showGoto: (url)=> {
+        const b = qs('#mrc-go', dlg);
+        b.style.display = 'inline-block';
+        b.onclick = () => location.href = url;
       },
-      onCancel(fn){ onCancel = fn; },
-      showClose(){ btnCancel.style.display='none'; btnClose.style.display='inline-block'; },
-      destroy(){ try{document.body.removeChild(wrap);}catch{} }
+      onClose: (fn)=> qs('#mrc-close', dlg).onclick = fn || (()=>wrap.remove())
     };
-  })();
-
-  // ==== 詳細ターゲット収集（GET/POST 両対応）====
-  // 戻り値: [{url, method:'GET'|'POST', body:null|urlencodedString}, ...]
-  function collectDetailTargets(){
-    const origin = location.origin;
-    const out = [];
-    const push = (t) => {
-      if (!t || !t.url) return;
-      // 重複排除
-      if (out.some(x=>x.url===t.url && x.method===t.method && x.body===t.body)) return;
-      out.push(t);
-    };
-
-    // a要素
-    document.querySelectorAll('a[href*="/maimai-mobile/record/playlogDetail"]').forEach(a=>{
-      const href = a.getAttribute('href'); if(!href) return;
-      try{ push({url:new URL(href, origin).href, method:'GET', body:null}); }catch{}
-    });
-
-    // form（POST想定・hidden含む全入力を送る）
-    document.querySelectorAll('form').forEach(f=>{
-      const action = f.getAttribute('action')||'';
-      if(!/\/maimai-mobile\/record\/playlogDetail/.test(action)) return;
-      const method = (f.getAttribute('method')||'POST').toUpperCase();
-      const u = new URL(action, origin).href;
-      // 入力をシリアライズ
-      const params = [];
-      f.querySelectorAll('input,select,textarea').forEach(el=>{
-        const name = el.getAttribute('name'); if(!name) return;
-        const type = (el.getAttribute('type')||'').toLowerCase();
-        if(type==='checkbox' || type==='radio'){ if(!el.checked) return; }
-        const val = el.value ?? '';
-        params.push(encodeURIComponent(name)+'='+encodeURIComponent(val));
-      });
-      const body = params.join('&');
-      if(method==='GET'){
-        push({url: body? (u + (u.includes('?')?'&':'?') + body) : u, method:'GET', body:null});
-      }else{
-        push({url:u, method:'POST', body});
-      }
-    });
-
-    // onclick の idx 抽出
-    const rxIdx = /playlogDetail\/?\S*?idx=([^'"\s&]+)/i;
-    document.querySelectorAll('[onclick]').forEach(el=>{
-      const s = String(el.getAttribute('onclick')||'');
-      const m = s.match(rxIdx); if(!m) return;
-      try{
-        const v = decodeURIComponent(m[1]);
-        const u = new URL('/maimai-mobile/record/playlogDetail/', origin);
-        u.searchParams.set('idx', v);
-        push({url:u.href, method:'GET', body:null});
-      }catch{}
-    });
-
-    // HTMLソースの相対リンク保険
-    try{
-      const html = document.documentElement.innerHTML;
-      const rxHref = /href\s*=\s*["']([^"']*playlogDetail\/?[^"']*)["']/gi;
-      let m; while((m = rxHref.exec(html))){
-        try{ push({url:new URL(m[1], origin).href, method:'GET', body:null}); }catch{}
-      }
-    }catch{}
-
-    return out;
   }
 
-  // ==== 1件処理（リトライ込み）====
-  async function handleOne(target, uid){
-    const {url, method, body} = target;
-    // リトライ最大3回（指数バックオフ）
-    const maxTry = 3;
-    for(let attempt=1; attempt<=maxTry; attempt++){
-      try{
-        const html = method==='POST' ? await fetchTextPOST(url, body) : await fetchTextGET(url);
-        await postIngest({html, sourceUrl:url, userId:uid});
-        return true;
-      }catch(e){
-        if (attempt === maxTry) return false;
-        await sleep(700 * attempt); // バックオフ
-      }
-    }
-    return false;
+  // === ページ種別判定 & 収集 ===
+  function collectDetailLinksFromRecordList(root=document) {
+    // 履歴一覧の「詳細」リンクを拾う
+    const anchors = qsa('a[href*="/maimai-mobile/record/playlogDetail/"]', root);
+    const hrefs = [...new Set(anchors.map(a => new URL(a.getAttribute('href'), location.href).href))];
+    // 重複排除。多すぎると時間がかかるので最大50
+    return hrefs.slice(0, 50);
   }
 
-  // ==== メイン ====
-  (async()=>{
-    ui.mount();
+  async function fetchHtml(url) {
+    const res = await fetch(url, { credentials:'include' });
+    if (!res.ok) throw new Error(`GET ${res.status}`);
+    return await res.text();
+  }
 
-    if (isDetailPage()) {
-      ui.setText('詳細ページを検出。1件を送信します…');
-      ui.setProgress(0,1);
-      try{
-        await postIngest({
-          html: document.documentElement.outerHTML,
-          sourceUrl: location.href,
-          userId: userId()
-        });
-        ui.setProgress(1,1);
-        ui.setText('送信完了（1/1）');
-      }catch(e){
-        ui.setText('送信失敗：'+e.message);
-      }
-      ui.showClose(); return;
+  async function postToApi(api, token, payload) {
+    const res = await fetch(api, {
+      method: 'POST',
+      mode: 'cors',
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { 'authorization': `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    return await res.json().catch(()=> ({}));
+  }
+
+  // === まとめ（サマリ保存 & 遷移導線） ===
+  function finalizeAndMaybeGo({ ok, fail, total }) {
+    try {
+      localStorage.setItem(LS.summary, JSON.stringify({
+        ok, fail, total, ts: Date.now()
+      }));
+    } catch (_) {}
+    // 失敗ゼロなら自動で遷移。失敗ありは手動ボタンのみ。
+    const to = `${CLIENT_URL}?done=1`;
+    if (fail === 0 && ok > 0) {
+      setTimeout(()=> location.href = to, 1500);
+      return { auto:true, url:to };
     }
+    return { auto:false, url:to };
+  }
 
-    if (isListPage()) {
-      const targets = collectDetailTargets();
+  // === 本体 ===
+  (async () => {
+    const overlay = makeOverlay();
+    overlay.onClose(()=> overlay.wrap.remove());
+
+    const { url: API_URL, token: TOKEN } = getApiConfig();
+
+    const here = location.href;
+    const isDetail = /\/maimai-mobile\/record\/playlogDetail\//.test(here);
+    const isRecord = /\/maimai-mobile\/record\/(index|$)/.test(here) || /\/maimai-mobile\/record\//.test(here);
+
+    let targets = [];
+    if (isDetail) {
+      targets = [here];
+    } else if (isRecord) {
+      targets = collectDetailLinksFromRecordList();
       if (!targets.length) {
-        ui.setText('詳細へのリンクが見つかりませんでした。\n履歴「一覧」で実行してください。');
-        ui.showClose(); return;
+        alert('詳細へのリンクが見つかりませんでした。履歴一覧で実行してください。');
+        overlay.wrap.remove();
+        return;
       }
-
-      const total = targets.length;
-      const estSec = total * 1.0; // 少し余裕目
-      const ok = await ui.askConfirm(total, estSec);
-      if (!ok){ ui.destroy(); return; }
-
-      let canceled=false; ui.onCancel(()=> canceled=true);
-      const uid = userId();
-      let done=0, fail=0;
-
-      for (const t of targets){
-        if (canceled) break;
-        ui.setText(`取得中 ${done}/${total}\n${t.method} ${t.url}`);
-        const ok1 = await handleOne(t, uid);
-        ok1 ? done++ : fail++;
-        ui.setProgress(done, total);
-        await sleep(rand(600, 1200)); // 連続アクセスしすぎない
-      }
-
-      ui.setText(`完了: ${done}/${total} 件送信。失敗: ${fail} 件。`);
-      ui.showClose(); return;
+      const okRun = confirm(`履歴データ（${targets.length}件）を取得して送信します。\nサーバー状況により少し時間がかかることがあります。実行しますか？`);
+      if (!okRun) { overlay.wrap.remove(); return; }
+    } else {
+      alert('このページでは実行できません。履歴一覧または詳細ページで実行してください。');
+      overlay.wrap.remove();
+      return;
     }
 
-    ui.setText('このブックマークは「履歴一覧」または「詳細」ページで実行してください。\nホーム→プレイ履歴→一覧 で再実行。');
-    ui.showClose();
-  })().catch(e=>{
-    alert('Bookmarklet error: '+(e&&e.message?e.message:e));
-    try{ ui.destroy(); }catch{}
-  });
+    const total = targets.length;
+    let ok = 0, fail = 0, done = 0;
+
+    overlay.setMsg(`開始します… 0/${total}`);
+    overlay.setBar(1);
+
+    for (const link of targets) {
+      try {
+        overlay.setMsg(`取得中… ${done}/${total}`);
+        const html = isDetail && total===1 ? document.documentElement.outerHTML : await fetchHtml(link);
+
+        // サーバーへ送信
+        overlay.setMsg(`送信中… ${done}/${total}`);
+        await postToApi(API_URL, TOKEN, {
+          html,
+          sourceUrl: link,
+        });
+
+        ok++;
+      } catch (e) {
+        console.log('[MRC] error:', e);
+        fail++;
+      } finally {
+        done++;
+        overlay.setMsg(`進行中… ${done}/${total}（成功: ${ok} / 失敗: ${fail}）`);
+        overlay.setBar(Math.round((done/total)*100));
+        // 軽いウェイトで鯖にやさしく
+        await sleep(120);
+      }
+    }
+
+    overlay.setMsg(`完了: ${ok}/${total} 件送信。失敗: ${fail} 件。`);
+    overlay.setBar(100);
+
+    const { auto, url } = finalizeAndMaybeGo({ ok, fail, total });
+    // 自動遷移しない場合は「結果ページへ」ボタンを出す
+    if (!auto) overlay.showGoto(url);
+  })();
 })();
