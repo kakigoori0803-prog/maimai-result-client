@@ -1,202 +1,299 @@
 <!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>maimai Result Client (β)</title>
 <style>
   :root{
-    --bg:#0b0d10; --panel:#11151a; --muted:#97a2ad; --fg:#e7f2f2;
-    --acc:#1dd3b0; --acc-weak:#1dd3b033; --danger:#ff6b6b;
-    --btn:#1dd3b0; --btn-txt:#042c2a; --btn-dim:#123b37;
-    --btn-gray:#2b2f36; --btn-gray-txt:#d7dee2;
+    --bg:#0c1116;--panel:#121821;--text:#e8eef5;--muted:#93a1b3;
+    --primary:#1bd6c1;--danger:#ff6b6b;--border:#263041;--shadow:rgba(0,0,0,.35);
   }
-  *{box-sizing:border-box}
-  body{margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic UI","Yu Gothic",Meiryo,sans-serif}
-  h1{font-size:28px; margin:22px 16px 6px}
-  .wrap{max-width:880px; margin:0 auto 120px; padding:0 14px}
-  .card{background:var(--panel); border:1px solid #1a2026; border-radius:14px; padding:16px; margin:14px 0}
-  .row{display:flex; gap:10px; align-items:center}
-  .row+.row{margin-top:10px}
-  label{display:block; font-weight:600; margin:6px 0 6px}
-  input,textarea{width:100%; background:#0c1117; color:var(--fg); border:1px solid #26303a; border-radius:10px; padding:12px 12px; outline:none}
-  input[readonly]{opacity:.9}
-  textarea{min-height:260px; resize:vertical; font-family: ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace}
-  small, .hint{color:var(--muted); font-size:13px}
-  .muted{color:var(--muted)}
-  .btn{appearance:none; border:none; cursor:pointer; padding:12px 16px; border-radius:12px; font-weight:700}
-  .btn-primary{background:var(--btn); color:var(--btn-txt)}
-  .btn-ghost{background:var(--btn-gray); color:var(--btn-gray-txt)}
-  .btn-danger{background:var(--danger)}
-  .btn:disabled{opacity:.5; cursor:default}
-  .stack{display:flex; gap:10px; flex-wrap:wrap}
-  .mono{font-family: ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace}
-  .badge{display:inline-block; padding:.2em .5em; border-radius:.6em; background:var(--acc-weak); color:#bffff2; font-size:12px; margin-left:.3em}
-  .toast{position:fixed; left:50%; top:14px; transform:translateX(-50%); z-index:99999; background:#0f0f10;
-         color:#e9fffb; border:1px solid #27d3bf; padding:10px 14px; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.25)}
-  .footer{color:#7e8a94; text-align:center; margin:26px 0}
-  .code{background:#0c1117; border:1px solid #26303a; border-radius:10px; padding:10px}
+  html,body{background:var(--bg);color:var(--text);margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Hiragino Kaku Gothic ProN","BIZ UDPGothic","Noto Sans JP",Meiryo,sans-serif;}
+  .wrap{max-width:920px;margin:24px auto;padding:0 16px;}
+  h1{font-size:28px;margin:0 0 16px;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 16px;margin:16px 0;box-shadow:0 10px 28px var(--shadow);}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  label{display:block;font-weight:700;margin:8px 0 6px}
+  input,textarea{width:100%;background:#0b1220;border:1px solid var(--border);color:var(--text);border-radius:12px;padding:14px 12px;outline:0;font-size:16px}
+  textarea{min-height:220px;resize:vertical}
+  .hint{color:var(--muted);font-size:13px;line-height:1.6}
+  .btn{appearance:none;border:0;border-radius:12px;padding:12px 16px;font-weight:700;cursor:pointer}
+  .btn-primary{background:var(--primary);color:#002b28}
+  .btn-ghost{background:#182232;color:var(--text)}
+  .btn-danger{background:#2a1518;color:#ffb3b3;border:1px solid #4f2026}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+  .pill{display:inline-block;border:1px solid var(--border);border-radius:999px;padding:4px 10px;font-size:12px;color:var(--muted)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
+  .footer{color:var(--muted);font-size:12px;margin-top:24px}
+  .bar{height:8px;background:#1a2432;border-radius:999px;overflow:hidden}
+  .bar>i{display:block;height:100%;width:0;background:var(--primary);transition:width .2s}
 </style>
 </head>
 <body>
+<div class="wrap">
   <h1>maimai Result Client (β)</h1>
-  <div class="wrap">
 
-    <div class="card">
-      <div class="row"><strong>API 設定（自動）</strong><span id="savedBadge" class="badge" style="display:none">saved</span></div>
-      <label>API URL</label>
-      <input id="apiUrl" readonly>
-      <label>Bearer Token</label>
-      <input id="apiToken" class="mono" readonly>
-      <div class="stack" style="margin-top:10px">
-        <button id="copyBm" class="btn btn-primary">ブックマークレットをコピー</button>
-        <button id="clearCfg" class="btn btn-ghost">保存した設定を削除</button>
-      </div>
-      <small class="muted">※ 上記2つは初回アクセス時に端末へ自動保存（localStorage）。配布先でも入力は不要です。</small>
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <div class="pill">初回アクセス時に端末へ自動保存（localStorage）</div>
+      <button id="copyBM" class="btn btn-primary">ブックマークレットをコピー</button>
+    </div>
+    <label>API URL（自動）</label>
+    <input id="apiUrl" class="mono" value="https://maimai-result.onrender.com/ingest" />
+    <label>Bearer Token（自動）</label>
+    <input id="apiToken" class="mono" value="677212069901c46a68a76e31ad8ba32a" />
+    <div class="row">
+      <button id="saveCfg" class="btn btn-ghost">設定を保存</button>
+      <button id="clearCfg" class="btn btn-danger">保存した設定を削除</button>
+    </div>
+    <div class="hint">※この2つは配布先でも入力不要にできます（ブックマークレットへ埋め込み）。</div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin:0 0 8px">HTML 貼り付け（手動モード）</h2>
+    <div class="hint">履歴一覧 <span class="mono">/maimai-mobile/record/</span> でも、各曲の詳細 <span class="mono">/playlogDetail/</span> でもOK。ブックマークレットを使うと <b>URL と HTML は自動入力</b>されます。</div>
+    <label>元ページURL（自動入力されます）</label>
+    <input id="srcUrl" placeholder="https://maimai..." />
+    <label>ここに maimai のプレイ履歴ページの HTML 全体を貼り付け</label>
+    <textarea id="html"></textarea>
+
+    <div class="row">
+      <button id="checkBtn" class="btn btn-ghost">内容チェック（簡易）</button>
+      <button id="sendBtn" class="btn btn-primary">API へ送信</button>
     </div>
 
-    <div class="card">
-      <strong>HTML 貼り付け（手動モード）</strong>
-      <p class="hint">履歴一覧 <code class="code">/maimai-mobile/record/</code> でも、各曲の詳細 <code class="code">/playlogDetail/</code> でもOK。<br>
-        ブックマークレットを使うと <strong>URL と HTML は自動入力</strong> されます。</p>
-      <label>元ページURL（自動入力されます）</label>
-      <input id="srcUrl" placeholder="https://maimai...">
-      <label>ここに maimai のプレイ履歴ページの HTML 全体を貼り付け</label>
-      <textarea id="html"></textarea>
-      <div class="stack" style="margin-top:10px">
-        <button id="checkBtn" class="btn btn-ghost">内容チェック（簡易）</button>
-        <button id="sendBtn" class="btn btn-primary">API へ送信</button>
-      </div>
-      <pre id="log" class="code" style="margin-top:12px; white-space:pre-wrap"></pre>
-    </div>
-
-    <div class="card">
-      <strong>現在のAPI設定（自動）</strong>
-      <div class="mono" id="cfgEcho" style="margin-top:6px"></div>
-    </div>
-
-    <div class="footer">
-      © maimai Result Client – client UI only. Server: Render / ingest endpoint.
+    <div id="status" class="card" style="margin-top:14px;display:none">
+      <div class="bar"><i id="pbar"></i></div>
+      <pre id="log" class="mono" style="white-space:pre-wrap;margin-top:10px"></pre>
     </div>
   </div>
 
+  <div class="card">
+    <div class="hint"><b>現在のAPI設定（自動）</b><br>
+      <span id="cur"></span>
+    </div>
+  </div>
+
+  <div class="footer">© your workspace</div>
+</div>
+
 <script>
-/*** ====== 配布時にここだけ必要なら編集 ====== ***/
-const DEFAULT_API_URL   = 'https://maimai-result.onrender.com/ingest';
-const DEFAULT_BEARER    = '677212069901c46a68a76e31ad8ba32a';
-const RESULT_PAGE_URL   = location.origin + location.pathname; // この index.html 自体
-const BOOKMARK_NAME     = 'maimai Result Client';
-/*** ======================================== ***/
+(function(){
+  const $ = sel => document.querySelector(sel);
+  const LS = {
+    url: 'mrc.apiUrl',
+    tok: 'mrc.apiToken',
+    bm : 'mrc.bookmarklet'
+  };
+  const apiUrlEl = $('#apiUrl');
+  const apiTokEl = $('#apiToken');
 
-const $ = s => document.querySelector(s);
-const LS = {
-  API:'mrc_api_url', TOKEN:'mrc_token', UID:'mrc_uid'
-};
+  // 初期ロード：localStorage優先
+  apiUrlEl.value = localStorage.getItem(LS.url) || apiUrlEl.value;
+  apiTokEl.value = localStorage.getItem(LS.tok) || apiTokEl.value;
+  updateCur();
 
-function uuid(){
-  return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
-}
-
-function getCfg(){
-  let api = localStorage.getItem(LS.API) || DEFAULT_API_URL;
-  let tk  = localStorage.getItem(LS.TOKEN) || DEFAULT_BEARER;
-  if(!localStorage.getItem(LS.API)) localStorage.setItem(LS.API, api);
-  if(!localStorage.getItem(LS.TOKEN)) localStorage.setItem(LS.TOKEN, tk);
-  if(!localStorage.getItem(LS.UID)) localStorage.setItem(LS.UID, uuid());
-  return {api, tk, uid:localStorage.getItem(LS.UID)};
-}
-function setCfg(api, tk){
-  localStorage.setItem(LS.API, api);
-  localStorage.setItem(LS.TOKEN, tk);
-  $('#apiUrl').value = api;
-  $('#apiToken').value = tk;
-  $('#cfgEcho').textContent = `API URL: ${api}   Bearer: ${tk.slice(0,6)}…${tk.slice(-4)}`;
-  const b = $('#savedBadge'); b.style.display='inline-block'; setTimeout(()=>b.style.display='none', 1800);
-}
-function copy(text){
-  navigator.clipboard.writeText(text);
-  showToast('コピーしました');
-}
-function showToast(msg){
-  const t = document.createElement('div');
-  t.className='toast'; t.textContent=msg;
-  document.body.appendChild(t);
-  setTimeout(()=>t.remove(), 2800);
-}
-function buildBookmarklet(){
-  const cfg = getCfg();
-  const js = bookmarkletSource(cfg.api, cfg.tk, RESULT_PAGE_URL);
-  return 'javascript:' + js;
-}
-
-/* ------- 可視UIの初期化 ------- */
-(function init(){
-  const cfg = getCfg();
-  $('#apiUrl').value = cfg.api;
-  $('#apiToken').value = cfg.tk;
-  $('#cfgEcho').textContent = `API URL: ${cfg.api}   Bearer: ${cfg.tk.slice(0,6)}…${cfg.tk.slice(-4)}`;
-
-  // ブックマークレットからの遷移なら #sent などをトースト表示
-  if(location.hash){
-    const q = new URLSearchParams(location.hash.slice(1));
-    const s=q.get('sent'), f=q.get('fail'), t=q.get('total');
-    if(s) showToast(`送信完了：${s}/${t} 件　失敗：${f||0} 件`);
-    // ブックマークレットが window.name で HTML を渡してくる互換モード（今は未使用）
-    try{
-      if(window.name && window.name.startsWith('MAI:')){
-        const raw = atob(window.name.slice(4));
-        const payload = JSON.parse(decodeURIComponent(escape(raw)));
-        $('#srcUrl').value = payload.sourceUrl||'';
-        $('#html').value   = payload.html||'';
-        window.name = ''; // 使い終わったら消す
-        showToast('HTML を受け取りました');
-      }
-    }catch(_){}
+  function updateCur(){
+    $('#cur').textContent = `API URL: ${apiUrlEl.value}  Bearer: ${apiTokEl.value.slice(0,6)}…${apiTokEl.value.slice(-4)}`;
   }
 
-  $('#copyBm').onclick = ()=>copy(buildBookmarklet());
-  $('#clearCfg').onclick = ()=>{
-    localStorage.removeItem(LS.API);
-    localStorage.removeItem(LS.TOKEN);
-    setCfg(DEFAULT_API_URL, DEFAULT_BEARER);
+  $('#saveCfg').onclick = () => {
+    localStorage.setItem(LS.url, apiUrlEl.value.trim());
+    localStorage.setItem(LS.tok, apiTokEl.value.trim());
+    makeBookmarklet(); updateCur(); alert('保存しました。');
+  };
+  $('#clearCfg').onclick = () => {
+    localStorage.removeItem(LS.url); localStorage.removeItem(LS.tok);
+    alert('保存を削除しました。ページを再読み込みしてください。');
   };
 
-  $('#checkBtn').onclick = ()=>{
-    const s = $('#html').value;
-    if(!s.trim()) return showToast('HTML が空です');
-    const ok = /maimai|<html/i.test(s) && /playlog|record/i.test(s);
-    $('#log').textContent = ok ? '形式: OK（簡易判定）' : '形式: 不明 or 想定外';
+  // 手動チェック
+  $('#checkBtn').onclick = () => {
+    const t = $('#html').value;
+    if(!t){ alert('HTML が空です'); return; }
+    const ok = /playlog|TRACK|ACHIEVEMENT|DX score/i.test(t);
+    alert(ok ? 'それっぽい HTML です。' : 'maimai の HTML ではなさそうです。');
   };
 
-  $('#sendBtn').onclick = async ()=>{
-    const cfg = getCfg();
-    const body = {html: $('#html').value, sourceUrl: $('#srcUrl').value, userId: cfg.uid};
-    if(!body.html.trim()) return showToast('HTML が空です');
-    $('#sendBtn').disabled = true;
+  // 送信
+  $('#sendBtn').onclick = async () => {
+    const html = $('#html').value;
+    const url  = $('#srcUrl').value || '';
+    if(!html){ alert('HTML を貼り付けてください'); return; }
+
+    const api = apiUrlEl.value.trim();
+    const tok = apiTokEl.value.trim();
+
+    $('#status').style.display='block';
+    $('#pbar').style.width='0%';
+    $('#log').textContent='送信中…';
+
     try{
-      const r = await fetch(cfg.api, {
+      const r = await fetch(api, {
         method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.tk,'X-User-ID':cfg.uid},
-        body: JSON.stringify(body),
+        headers:{
+          'Content-Type':'application/json',
+          'Authorization':'Bearer '+tok
+        },
+        body: JSON.stringify({ html, url })
       });
-      const j = await r.json().catch(()=>({}));
-      $('#log').textContent = `API status: ${r.status} ${r.ok?'(OK)':'(NG)'}\n---\n`+JSON.stringify(j,null,2);
-      showToast(r.ok?'送信しました':'送信に失敗しました');
+      const txt = await r.text().catch(()=> '');
+      $('#pbar').style.width='100%';
+      $('#log').textContent = 'API status: '+r.status+' ('+(r.ok?'OK':'NG')+')\n---\n'+txt;
     }catch(e){
-      $('#log').textContent = '送信エラー: '+e;
-      showToast('送信に失敗しました');
-    }finally{
-      $('#sendBtn').disabled = false;
+      $('#log').textContent = '送信失敗: '+(e?.message||e);
     }
   };
-})();
 
-/* ======= ブックマークレット生成用（index 内部で使用） ======= */
-/* 返り値: 「javascript:」を除いた1行のコード文字列 */
-function bookmarkletSource(API_URL, TOKEN, RESULT_URL){
-  // ここは minify された実体。index 上では文字列として連結して返す。
-  return `(function(){function u(){return([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,function(c){return(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16)})}var CFG_API='`+API_URL+`',CFG_TOKEN='`+TOKEN+`',RESULT_URL='`+RESULT_URL+`';var uid=localStorage.getItem('mrc_uid')||u();localStorage.setItem('mrc_uid',uid);function el(t,css,txt){var e=document.createElement(t);if(css)e.style.cssText=css;if(txt!=null)e.textContent=txt;return e}function modal(){var ov=el('div','position:fixed;inset:0;background:rgba(0,0,0,.35);backdrop-filter:blur(2px);z-index:2147483647;display:flex;align-items:center;justify-content:center;');var box=el('div','width:min(560px,90vw);background:#0f1014;color:#e9fffb;border:1px solid #26303a;border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,.45);padding:16px');var tt=el('div','font-weight:800;font-size:18px;margin-bottom:6px','maimai Result Client');var msg=el('div','font-size:14px;line-height:1.6;margin-bottom:8px');var bar=el('div','height:8px;background:#1c2229;border-radius:99px;overflow:hidden;margin:10px 0 6px');var cur=el('div','height:100%;width:0;background:#1dd3b0;transition:width .15s');bar.appendChild(cur);var sub=el('div','color:#9fb0ba;font-size:13px;margin-bottom:12px');var btns=el('div','display:flex;gap:8px;justify-content:flex-end');var btnClose=el('button','padding:10px 14px;border-radius:12px;border:none;background:#2b2f36;color:#e7ecef;font-weight:700', '戻る');var btnGo=el('button','padding:10px 14px;border-radius:12px;border:none;background:#1dd3b0;color:#062a28;font-weight:900', '結果ページへ');btnGo.disabled=true;btnGo.style.opacity=.6;btns.appendChild(btnClose);btns.appendChild(btnGo);box.appendChild(tt);box.appendChild(msg);box.appendChild(bar);box.appendChild(sub);box.appendChild(btns);ov.appendChild(box);document.body.appendChild(ov);btnClose.onclick=function(){ov.remove()};return{ov:ov,msg:msg,sub:sub,cur:cur,btnGo:btnGo}}function abs(u){try{return new URL(u,location.href).href}catch(_){return u}}function qsa(s,root){return Array.prototype.slice.call((root||document).querySelectorAll(s))}var ui=modal();function detailLinks(){var as=qsa('a[href*=\"playlogDetail\"]');var list=[];as.forEach(function(a){var href=a.getAttribute('href')||'';if(href.indexOf('playlogDetail')>=0)list.push(abs(href))});return list}function percent(n,d){return d?Math.floor(n/d*1000)/10:0}function fetchText(url){return fetch(url,{credentials:'include'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text()})}function sendOne(payload){return fetch(CFG_API,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+CFG_TOKEN,'X-User-ID':uid},body:JSON.stringify(payload)}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json().catch(function(){return{}})})}function run(){var here=location.href;var onDetail=/playlogDetail/.test(here);var onList=/\\/record\\//.test(here);var urls=[];if(onDetail){urls=[here]}else if(onList){urls=detailLinks().slice(0,50)}else{alert('\\u5C65\\u6B74\\u4E00\\u89A7\\u307E\\u305F\\u306F\\u8A73\\u7D30\\u30DA\\u30FC\\u30B8\\u3067\\u5B9F\\u884C\\u3057\\u3066\\u304F\\u3060\\u3055\\u3044');return}if(urls.length===0){alert('\\u5C65\\u6B74\\u306E\\u8A73\\u7D30\\u30EA\\u30F3\\u30AF\\u304C\\u898B\\u3064\\u304B\\u308A\\u307E\\u305B\\u3093\\u3067\\u3057\\u305F\\u3002\\u5C65\\u6B74\\u4E00\\u89A7\\u3067\\u5B9F\\u884C\\u3057\\u3066\\u304F\\u3060\\u3055\\u3044');return}var n=urls.length;ui.msg.textContent='履歴データ（'+n+'件）を取得・送信します';ui.sub.textContent='進捗: 0/'+n;var ok=0,ng=0,i=0,concurrency=3;function step(){if(i>=n)return;var index=i++;var url=urls[index];Promise.resolve().then(function(){return onDetail?Promise.resolve(document.documentElement.outerHTML):fetchText(url)}).then(function(html){return sendOne({html:html,sourceUrl:url})}).then(function(){ok++}).catch(function(){ng++}).finally(function(){ui.cur.style.width=percent(ok+ng,n)+'%';ui.sub.textContent='進捗: '+(ok+ng)+'/'+n+'　成功:'+ok+' 失敗:'+ng; if(ok+ng<n){step()}else{ui.msg.textContent='完了: '+ok+'/'+n+' 件送信。 失敗: '+ng+' 件。';if(!ng)ui.sub.textContent+='　\\uD83C\\uDF89';ui.btnGo.disabled=false;ui.btnGo.style.opacity=1;ui.btnGo.onclick=function(){location.href=RESULT_URL+'#sent='+ok+'&fail='+ng+'&total='+n}}});}for(var c=0;c<concurrency;c++)step()}run()})();`;
-}
+  // ブックマークレット生成
+  function makeBookmarklet(){
+    const API = (localStorage.getItem(LS.url)||apiUrlEl.value.trim());
+    const TOK = (localStorage.getItem(LS.tok)||apiTokEl.value.trim());
+    const RESULT = 'https://kakigoori0803-prog.github.io/maimai-result-client/';
+
+    // ①可読ソース
+    const source = `
+(() => {
+  const API='${API}';
+  const TOKEN='${TOK}';
+  const RESULT_URL='${RESULT}';
+  const sleep = ms=>new Promise(r=>setTimeout(r,ms));
+
+  // UI
+  const overlayId='mrc-overlay';
+  if(document.getElementById(overlayId)) return;
+
+  const style = document.createElement('style');
+  style.textContent = \`
+#mrc-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2147483647;display:flex;align-items:center;justify-content:center}
+#mrc-box{width:min(520px,92vw);background:#0f1720;color:#e6edf3;border-radius:16px;border:1px solid #263141;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+#mrc-hd{padding:14px 16px;border-bottom:1px solid #263141;font-weight:800}
+#mrc-bd{padding:14px 16px;line-height:1.6}
+#mrc-ft{padding:12px 16px;display:flex;gap:10px;justify-content:flex-end}
+.mrc-btn{appearance:none;border:0;border-radius:10px;padding:12px 14px;font-weight:800}
+.mrc-ghost{background:#1b2430;color:#e6edf3}
+.mrc-primary{background:#1bd6c1;color:#022e2a}
+.mrc-btn:disabled{opacity:.6}
+#mrc-bar{height:8px;background:#17202b;border-radius:999px;overflow:hidden;margin-top:10px}
+#mrc-bar>i{display:block;height:100%;width:0;background:#1bd6c1;transition:width .2s}
+.mrc-muted{color:#99a7bd;font-size:13px}
+\`;
+  document.head.appendChild(style);
+
+  const wrap=document.createElement('div');wrap.id=overlayId;
+  wrap.innerHTML=\`
+    <div id="mrc-box" role="dialog" aria-modal="true">
+      <div id="mrc-hd">maimai Result Client</div>
+      <div id="mrc-bd">
+        <div id="mrc-msg">履歴データを取得・送信します。</div>
+        <div id="mrc-bar" style="display:none"><i id="mrc-p"></i></div>
+        <div class="mrc-muted" id="mrc-sub"></div>
+      </div>
+      <div id="mrc-ft">
+        <button id="mrc-cancel" class="mrc-btn mrc-ghost">戻る</button>
+        <button id="mrc-go" class="mrc-btn mrc-primary">開始</button>
+      </div>
+    </div>\`;
+  document.body.appendChild(wrap);
+  const $=id=>document.getElementById(id);
+  const close=()=>wrap.remove();
+
+  // 事前チェック：履歴一覧のみ
+  const isRecord = /\\/maimai-mobile\\/record\\//.test(location.pathname);
+  if(!isRecord){
+    $('#mrc-msg').textContent='履歴一覧（/maimai-mobile/record/）で実行してください。';
+    $('#mrc-sub').textContent='詳細ページ・ホームではリンクを収集できません。';
+    $('#mrc-go').style.display='none';
+    $('#mrc-cancel').onclick=close;
+    return;
+  }
+
+  // リンク収集
+  const links = Array.from(document.querySelectorAll('a[href*="playlogDetail"]'))
+                .map(a=>new URL(a.getAttribute('href'), location.href).href);
+  const uniq = [...new Set(links)];
+  const total = uniq.length;
+  if(!total){
+    $('#mrc-msg').textContent='履歴の詳細リンクが見つかりませんでした。';
+    $('#mrc-sub').textContent='ページを再読み込みしてから試してください。';
+    $('#mrc-go').style.display='none';
+    $('#mrc-cancel').onclick=close;
+    return;
+  }
+
+  // 事前確認UI
+  $('#mrc-msg').textContent=\`履歴データ（\${total}件）を取得・送信します。\`;
+  $('#mrc-sub').textContent='開始を押すと処理を始めます。';
+  $('#mrc-cancel').onclick=close;
+
+  // 実行
+  $('#mrc-go').onclick = async () => {
+    $('#mrc-go').disabled=true; $('#mrc-cancel').disabled=true;
+    $('#mrc-go').textContent='取得中';
+    $('#mrc-bar').style.display='block';
+    $('#mrc-sub').textContent='進捗: 0/'+total;
+
+    let ok=0, ng=0;
+    const prog = $('#mrc-p'), msg=$('#mrc-msg'), sub=$('#mrc-sub');
+
+    for(let i=0;i<uniq.length;i++){
+      const url = uniq[i];
+      try{
+        const html = await fetch(url,{credentials:'include'}).then(r=>r.text());
+        await fetch(API,{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN},
+          body: JSON.stringify({ html, url })
+        });
+        ok++;
+      }catch(e){ ng++; }
+      const ratio = Math.round(((i+1)/total)*100);
+      prog.style.width = ratio+'%';
+      sub.textContent = \`進捗: \${i+1}/\${total}\`;
+      await sleep(20); // 描画猶予
+    }
+
+    // 完了UI
+    msg.textContent = \`完了: \${ok}/\${total}　失敗: \${ng} 件\`;
+    $('#mrc-go').textContent='結果ページへ';
+    $('#mrc-go').disabled=false;
+    $('#mrc-cancel').disabled=false;
+    $('#mrc-cancel').onclick=close;
+    $('#mrc-go').onclick=()=>{ location.href=RESULT_URL; };
+  };
+})();`;
+
+    // ②ワンライナー（ブックマーク用）
+    const oneLine = 'javascript:' + encodeURIComponent(source);
+    localStorage.setItem(LS.bm, oneLine);
+    return oneLine;
+  }
+
+  // 初回生成
+  makeBookmarklet();
+
+  // クリップボードへ
+  $('#copyBM').onclick = async () => {
+    const code = localStorage.getItem(LS.bm) || makeBookmarklet();
+    try{
+      await navigator.clipboard.writeText(code);
+      alert('ブックマークレットをコピーしました。Safari で「新規ブックマーク」を作成し、URL欄にそのまま貼り付けてください。');
+    }catch(e){
+      prompt('コピーできない場合は下の全体を選択してコピーしてください。', code);
+    }
+  };
+
+  // window.name 経由での受け取り（旧フロー互換）
+  try{
+    if(window.name && window.name.startsWith('MAI:')){
+      const data = JSON.parse(decodeURIComponent(escape(atob(window.name.slice(4)))));
+      $('#srcUrl').value = data.sourceUrl||'';
+      $('#html').value   = data.html||'';
+      window.name='';
+    }
+  }catch(_){}
+})();
 </script>
 </body>
 </html>
