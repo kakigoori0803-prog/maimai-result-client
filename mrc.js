@@ -1,19 +1,134 @@
-(()=>{const API="https://maimai-result.onrender.com/ingest";const TOKEN="677212069901c46a68a76e31ad8ba32a";const RESULT_URL="https://kakigoori0803-prog.github.io/maimai-result-client/";const ID="mrc-overlay";const Q=(s,r=document)=>r.querySelector(s);const QA=(s,r=document)=>Array.from(r.querySelectorAll(s));const sleep=t=>new Promise(r=>setTimeout(r,t));try{if(Q("#"+ID))Q("#"+ID).remove();const css="#mrc-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2147483647;display:flex;align-items:center;justify-content:center;-webkit-user-select:none;user-select:none}#mrc-box{width:min(520px,92vw);background:#0f1720;color:#e6edf3;border-radius:16px;border:1px solid #263141;box-shadow:0 20px 60px rgba(0,0,0,.35);font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial}#mrc-hd{padding:14px 16px;border-bottom:1px solid #263141;font-weight:800}#mrc-bd{padding:14px 16px;line-height:1.6}#mrc-ft{padding:12px 16px;display:flex;gap:10px;justify-content:flex-end}.mrc-btn{appearance:none;border:0;border-radius:10px;padding:12px 14px;font-weight:800}.mrc-ghost{background:#1b2430;color:#e6edf3}.mrc-primary{background:#1bd6c1;color:#022e2a}.mrc-btn:disabled{opacity:.6}#mrc-bar{height:8px;background:#17202b;border-radius:999px;overflow:hidden;margin-top:10px;display:none}#mrc-bar>i{display:block;height:100%;width:0;background:#1bd6c1;transition:width .2s}.mrc-muted{color:#99a7bd;font-size:13px}";
-const st=document.createElement("style");st.textContent=css;document.head.appendChild(st);
-const ov=document.createElement("div");ov.id=ID;ov.innerHTML='<div id="mrc-box" role="dialog" aria-modal="true"><div id="mrc-hd">maimai Result Client</div><div id="mrc-bd"><div id="mrc-msg">履歴データを取得・送信します。</div><div id="mrc-bar"><i id="mrc-p"></i></div><div class="mrc-muted" id="mrc-sub"></div></div><div id="mrc-ft"><button id="mrc-cancel" class="mrc-btn mrc-ghost">戻る</button><button id="mrc-go" class="mrc-btn mrc-primary">開始</button></div></div>';document.body.appendChild(ov);
-const $=id=>document.getElementById(id);const bind=(el,fn)=>{const h=e=>{e&&e.preventDefault();e&&e.stopPropagation();fn()};el.addEventListener("click",h,{passive:false});el.addEventListener("touchend",h,{passive:false});};const block=e=>{e.preventDefault();e.stopPropagation()};ov.addEventListener("touchmove",block,{passive:false});ov.addEventListener("wheel",block,{passive:false});
-const close=()=>ov.remove();
-bind($("#mrc-cancel"),close);
-const onRecord=/\/maimai-mobile\/record\//.test(location.pathname);
-if(!onRecord){$("#mrc-msg").textContent="履歴一覧（/maimai-mobile/record/）で実行してください。";$("#mrc-sub").textContent="ホームや詳細ページでは取得できません。";$("#mrc-go").textContent="履歴へ移動";$("#mrc-bar").style.display="none";bind($("#mrc-go"),()=>{location.assign("/maimai-mobile/record/")});return}
-const rawLinks=QA('a[href*="playlogDetail"]');const urls=[...new Set(rawLinks.map(a=>{try{return new URL(a.getAttribute("href"),location.href).href}catch(e){return null}}).filter(Boolean))];
-const total=urls.length;const msg=$("#mrc-msg"),sub=$("#mrc-sub"),bar=$("#mrc-bar"),p=$("#mrc-p"),go=$("#mrc-go"),back=$("#mrc-cancel");
-if(!total){msg.textContent="履歴の詳細リンクが見つかりませんでした。";sub.textContent="ページを再読み込みして再実行してください。";go.style.display="none";return}
-msg.textContent=`履歴データ（${total}件）を取得・送信します。`;sub.textContent="準備できたら「開始」を押してください。";
-bind(go,async()=>{go.disabled=true;back.disabled=true;bar.style.display="block";go.textContent="取得中";sub.textContent=`進捗: 0/${total}`;
-let ok=0,ng=0;const post=async (html,url)=>{await fetch(API,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+TOKEN},body:JSON.stringify({html,url})})};
-for(let i=0;i<urls.length;i++){const url=urls[i];try{const html=await fetch(url,{credentials:"include"}).then(r=>r.text());await post(html,url);ok++}catch(e){ng++}p.style.width=Math.round(((i+1)/total)*100)+"%";sub.textContent=`進捗: ${i+1}/${total}`;await sleep(20)}
-msg.textContent=`完了: ${ok}/${total}　失敗: ${ng} 件`;go.textContent="結果ページへ";go.disabled=false;back.disabled=false;back.textContent="戻る"; // keep same
-// クリックが拾われないケース対策（二重バインドOK）
-bind(back,close);bind(go,()=>{setTimeout(()=>location.assign(RESULT_URL),0);});
-});}catch(e){alert("Bookmarklet error: "+(e&&e.message?e.message:e))}})();
+<script>
+// == maimai Result Client bookmarklet payload ==
+// 完全版。履歴一覧で実行→詳細50件までを取得→API送信→結果ページへ。
+// kakigoori0803-prog.github.io / Render の既定値を内蔵しつつ、
+// localStorage("MRC_API","MRC_TOKEN") があればそれを優先。
+
+(() => {
+  const CLIENT = 'https://kakigoori0803-prog.github.io/maimai-result-client/';
+  const DEF_API = 'https://maimai-result.onrender.com/ingest';
+  const DEF_TOKEN = '677212069901c46a68a76e31ad8ba32a';
+
+  const $  = (sel, root=document) => root.querySelector(sel);
+  const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+  const api   = localStorage.getItem('MRC_API')   || localStorage.getItem('mrc.api')   || DEF_API;
+  const token = localStorage.getItem('MRC_TOKEN') || localStorage.getItem('mrc.token') || DEF_TOKEN;
+
+  // ---------- UI ----------
+  const st = document.createElement('style');
+  st.textContent = `
+  #mrc-ov{position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center}
+  #mrc-box{width:min(92vw,560px);background:#111;border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.4);color:#fff;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  #mrc-hd{padding:18px 20px 8px;font-weight:700;font-size:20px}
+  #mrc-msg{padding:6px 20px 0 20px;line-height:1.6;font-size:16px}
+  #mrc-sub{padding:2px 20px 0 20px;opacity:.8;font-size:13px}
+  #mrc-bar{height:6px;background:#333;margin:14px 20px 0;border-radius:999px;overflow:hidden}
+  #mrc-fill{height:100%;width:0;background:#2dd4bf;transition:width .25s}
+  #mrc-btns{display:flex;gap:10px;justify-content:flex-end;padding:16px 16px 16px}
+  .mrc-btn{appearance:none;border:0;border-radius:10px;padding:10px 16px;font-weight:700}
+  #mrc-cancel{background:#2f2f2f;color:#eee}
+  #mrc-go{background:#22c55e;color:#072; color:#072; color:#fff}
+  `;
+  const ov = document.createElement('div');
+  ov.id = 'mrc-ov';
+  ov.innerHTML = `
+   <div id="mrc-box" role="dialog" aria-modal="true" aria-labelledby="mrc-hd">
+     <div id="mrc-hd">maimai Result Client</div>
+     <div id="mrc-msg">履歴データを取得・送信します。</div>
+     <div id="mrc-sub">開始を押すと処理がはじまります。</div>
+     <div id="mrc-bar"><div id="mrc-fill"></div></div>
+     <div id="mrc-btns">
+       <button id="mrc-cancel" class="mrc-btn">戻る</button>
+       <button id="mrc-go" class="mrc-btn">開始</button>
+     </div>
+   </div>`;
+  document.head.appendChild(st);
+  document.body.appendChild(ov);
+
+  const msg  = $('#mrc-msg');
+  const sub  = $('#mrc-sub');
+  const fill = $('#mrc-fill');
+  const go   = $('#mrc-go');
+  const back = $('#mrc-cancel');
+
+  const close = () => ov.remove();
+
+  const setButtons = (leftText, leftHandler, rightText, rightHandler) => {
+    back.textContent = leftText;
+    go.textContent   = rightText;
+    back.onclick = leftHandler;
+    go.onclick   = rightHandler;
+  };
+
+  // ---------- 事前チェック ----------
+  const onRecord = /\/maimai-mobile\/record\//.test(location.href);
+  if (!onRecord) {
+    msg.textContent = '履歴一覧ページで実行してください。';
+    sub.textContent = 'ページ上部の「プレイ履歴」から履歴一覧へ移動して再度実行してください。';
+    $('#mrc-bar').style.display = 'none';
+    setButtons('閉じる', close, '履歴へ移動', () => location.href = '/maimai-mobile/record/');
+    return;
+  }
+
+  // 収集対象リンク
+  const urls = Array.from(new Set(
+    $$('a[href*="playlogDetail"]').map(a => (new URL(a.getAttribute('href'), location.href)).href)
+  )).slice(0, 50);
+
+  if (!urls.length) {
+    msg.textContent = '履歴の詳細リンクが見つかりませんでした。';
+    sub.textContent = '履歴一覧を下まで読み込んでから再度実行してください。';
+    $('#mrc-bar').style.display = 'none';
+    setButtons('閉じる', close, 'OK', close);
+    return;
+  }
+
+  // 初期表示（確認）
+  msg.textContent = `履歴データ（${urls.length}件）を取得・送信します。`;
+  sub.textContent = '開始を押すと処理がはじまります。アプリは閉じないでください。';
+  fill.style.width = '0%';
+
+  setButtons('戻る', close, '開始', start);
+
+  // ---------- メイン処理 ----------
+  async function start() {
+    go.disabled = true;
+    back.disabled = true;
+
+    let ok = 0, ng = 0;
+    const post = async (html, src) => {
+      const headers = {'Content-Type': 'application/json'};
+      if (token) headers.Authorization = 'Bearer ' + token;
+      const body = JSON.stringify({ html, sourceUrl: src });
+      const r = await fetch(api, {method:'POST', headers, body}).catch(()=>({ok:false}));
+      return r && r.ok;
+    };
+
+    for (let i = 0; i < urls.length; i++) {
+      const u = urls[i];
+      msg.textContent = `取得・送信中… ${i+1}/${urls.length}`;
+      sub.textContent = u;
+      fill.style.width = `${Math.round(((i)/urls.length)*100)}%`;
+
+      try {
+        const r = await fetch(u, {credentials:'include', cache:'no-store'});
+        const html = await r.text();
+        const posted = await post(html, u);
+        posted ? ok++ : ng++;
+      } catch {
+        ng++;
+      }
+    }
+
+    fill.style.width = '100%';
+    msg.textContent = `完了：${ok}/${urls.length}　失敗：${ng} 件`;
+    sub.textContent = `API: ${api}`;
+    go.disabled = false; back.disabled = false;
+
+    setButtons('戻る', close, '結果ページへ', () => {
+      try { window.open(CLIENT, '_blank'); } catch { location.href = CLIENT; }
+    });
+  }
+})();
+</script>
