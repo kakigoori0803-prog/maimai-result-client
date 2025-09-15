@@ -1,63 +1,61 @@
-# server_register.py みたいなファイルに追加（既存 app に統合してOK）
-from fastapi import FastAPI, Header, HTTPException
+# --- ここから追加 --------------------------------------------
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Dict
-import secrets, time, json, os
+import os, json, secrets
 
-app = FastAPI()  # 既存の app を使うならこの行は不要
-
-TOKENS_PATH = "/data/mrc_tokens.json"  # RenderのDisk使用時
-MEM_DB: Dict[str, Dict] = {}           # Diskが無い場合のフォールバック
+TOKENS_PATH = "/data/mrc_tokens.json"   # Render Disk を使うなら /data 配下でOK
+MEM_DB: Dict[str, Dict] = {}            # メモリキャッシュ
 
 def _load_tokens():
     try:
         if os.path.exists(TOKENS_PATH):
-            with open(TOKENS_PATH, "r") as f:
-                return json.load(f)
-    except:
+            with open(TOKENS_PATH, "r", encoding="utf-8") as f:
+                d = json.load(f)
+                if isinstance(d, dict):
+                    MEM_DB.update(d)
+    except Exception:
         pass
-    return {}
 
-def _save_tokens(store):
+def _save_tokens():
     try:
         os.makedirs(os.path.dirname(TOKENS_PATH), exist_ok=True)
-        with open(TOKENS_PATH, "w") as f:
-            json.dump(store, f)
-    except:
+        with open(TOKENS_PATH, "w", encoding="utf-8") as f:
+            json.dump(MEM_DB, f, ensure_ascii=False)
+    except Exception:
         pass
 
-TOKENS = _load_tokens() or MEM_DB
+try:
+    app  # 既存の app を流用
+except NameError:
+    app = FastAPI()
 
-class RegisterReq(BaseModel):
-    device_id: Optional[str] = None
+@app.on_event("startup")
+def _startup():
+    _load_tokens()
 
-class RegisterResp(BaseModel):
-    api_url: str
+class RegisterIn(BaseModel):
+    user_id: str                        # JS 側の uuid
+    ua: Optional[str] = None
+    platform: Optional[str] = None
+
+class RegisterOut(BaseModel):
+    ok: bool
     token: str
-    user_id: str
 
-@app.post("/register", response_model=RegisterResp)
-def register(req: RegisterReq):
-    # 1) デバイスIDが無ければ簡易発行（サーバー側でもバックアップ）
-    device_id = req.device_id or secrets.token_hex(16)
+@app.post("/register", response_model=RegisterOut)
+def register(body: RegisterIn):
+    uid = (body.user_id or "").strip()
+    if not uid:
+        raise HTTPException(status_code=400, detail="user_id required")
 
-    # 2) 既存トークンがあれば再利用、無ければ発行
-    #    「1デバイス=1トークン」を基本にします
-    for t, meta in TOKENS.items():
-        if meta.get("device_id") == device_id:
-            return RegisterResp(api_url="/ingest", token=t, user_id=device_id)
+    # 既存があれば再発行しない（繰り返し実行に強い）
+    if uid in MEM_DB and "token" in MEM_DB[uid]:
+        token = MEM_DB[uid]["token"]
+    else:
+        token = secrets.token_hex(16)
+        MEM_DB[uid] = {"token": token, "ua": body.ua, "platform": body.platform}
+        _save_tokens()
 
-    token = secrets.token_urlsafe(32)
-    TOKENS[token] = {"device_id": device_id, "created_at": int(time.time())}
-    _save_tokens(TOKENS)
-    return RegisterResp(api_url="/ingest", token=token, user_id=device_id)
-
-# 既存 /ingest の認証で以下のように判定を追加してください
-# Authorization: Bearer <token> が TOKENS に存在するかを確認
-# 例:
-# auth = request.headers.get("Authorization", "")
-# if not auth.startswith("Bearer "): raise HTTPException(401, "no auth")
-# token = auth.split(" ",1)[1]
-# if token not in TOKENS: raise HTTPException(401, "bad token")
-# user_id = TOKENS[token]["device_id"]
-# … user_id を使って保存 …
+    return {"ok": True, "token": token}
+# --- ここまで追加 --------------------------------------------
