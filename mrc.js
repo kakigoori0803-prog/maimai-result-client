@@ -1,4 +1,4 @@
-/* mrc.js — auto register + auto scroll + ingest */
+/* mrc.js — auto register + auto scroll + ingest (strong link finder) */
 (() => {
   const API_BASE = "https://maimai-result.onrender.com";
   const REGISTER = API_BASE + "/register";
@@ -76,7 +76,7 @@
     if (!res.ok) throw new Error("register failed: "+(await res.text()));
     const j = await res.json().catch(()=> ({}));
 
-    // {token, api_url} または {bearer, ingest_url}
+    // {token, api_url} or {bearer, ingest_url}
     const _token = j.token ?? j.bearer;
     let   _api   = j.api_url ?? j.ingest_url ?? "/ingest";
     if (!_token) throw new Error("register invalid response");
@@ -92,30 +92,45 @@
   // ===== auto scroll to bottom (ページ末までロード) =====
   async function autoScroll() {
     let last = -1, sameCount = 0;
-    for (let i=0;i<30;i++){
+    for (let i=0;i<40;i++){
       window.scrollTo(0, document.body.scrollHeight);
-      await sleep(600);
+      await sleep(650);
       const h = document.body.scrollHeight;
       if (h === last) { if (++sameCount >= 2) break; } else { sameCount = 0; last = h; }
     }
   }
 
-  // ===== collect 50 links =====
+  // ===== collect 50 links — href / onclick / raw HTML fallback =====
   function collectLinks() {
-    const urls = [];
-    // href 版
-    $$('a[href*="playlogDetail"]').forEach(a=>{
-      try {
-        const u = new URL(a.getAttribute("href"), location.href);
-        if (/playlogDetail/.test(u.pathname)) urls.push(u.toString());
-      } catch {}
+    const set = new Set();
+
+    // 1) a[href*="playlogDetail"]
+    document.querySelectorAll('a[href]').forEach(a=>{
+      const href = a.getAttribute("href") || "";
+      if (/playlogDetail/.test(href)) {
+        try { set.add(new URL(href, location.href).toString()); } catch {}
+      }
     });
-    // onclick 版
-    $$('a[onclick*="playlogDetail"]').forEach(a=>{
-      const m = String(a.getAttribute("onclick")||"").match(/playlogDetail\(['"]([^'"]+)['"]/);
-      if (m) try { urls.push(new URL(m[1], location.href).toString()); } catch {}
+
+    // 2) [onclick*="playlogDetail('...')"] （a以外にも付くことがあるので全要素）
+    document.querySelectorAll('[onclick]').forEach(el=>{
+      const s = String(el.getAttribute('onclick') || '');
+      const m = s.match(/playlogDetail\(['"]([^'"]+)['"]/);
+      if (m) {
+        try { set.add(new URL(m[1], location.href).toString()); } catch {}
+      }
     });
-    return Array.from(new Set(urls)).slice(0,50);
+
+    // 3) フォールバック：ページ全体HTMLを正規表現でスキャン
+    //    例: "/maimai-mobile/playlogDetail/?idx=..." のような断片を抽出
+    const html = document.documentElement.innerHTML;
+    const re = /["'](\/[^"' >]*playlogDetail[^"' >]*)["']/g;
+    let mm;
+    while ((mm = re.exec(html)) && set.size < 50) {
+      try { set.add(new URL(mm[1], location.href).toString()); } catch {}
+    }
+
+    return Array.from(set).slice(0, 50);
   }
 
   // ===== send html to /ingest =====
@@ -144,9 +159,9 @@
     open(`履歴データを取得・送信します。`,[
       {label:"やめる", cls:"gray", onClick:close},
       {label:"開始",  cls:"green", onClick: async()=>{
-        // 自動スクロールで末尾まで読み込み
         await autoScroll();
         let urls = collectLinks();
+
         if (!urls.length){
           open(`履歴の詳細リンクが見つかりませんでした。<br>画面を一番下まで表示してから再実行してください。`,[
             {label:"閉じる", cls:"gray", onClick:close},
