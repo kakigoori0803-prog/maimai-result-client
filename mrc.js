@@ -1,27 +1,23 @@
-/* mrc.js — auto register + ingest */
+/* mrc.js — auto register + ingest (detail HTML fetch版) */
 (() => {
   const API_BASE = "https://maimai-result.onrender.com";
-  const INGEST = API_BASE + "/ingest";
+  const INGEST   = API_BASE + "/ingest";
   const REGISTER = API_BASE + "/register";
-  const VIEW = API_BASE + "/view";
+  const VIEW     = API_BASE + "/view";
 
-  const LS = {
-    api: "MRC_API_URL",
-    token: "MRC_TOKEN",
-    uid: "MRC_USER_ID",
-  };
+  const LS = { api:"MRC_API_URL", token:"MRC_TOKEN", uid:"MRC_USER_ID" };
 
-  // ---------- small utils ----------
-  const $ = s => document.querySelector(s);
+  // ---------- utils ----------
+  const $  = s => document.querySelector(s);
   const $$ = s => Array.from(document.querySelectorAll(s));
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const uuid = () =>
     (crypto && crypto.randomUUID) ? crypto.randomUUID() :
-      "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
-        const r = Math.random() * 16 | 0, v = c === "x" ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      });
+    "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+      const r = Math.random()*16|0, v = c==="x" ? r : (r&0x3|0x8); return v.toString(16);
+    });
 
+  // overlay
   const ov = document.createElement("div");
   ov.id = "mrc-ov";
   const css = document.createElement("style");
@@ -39,139 +35,178 @@
 `;
   document.head.appendChild(css);
 
-  const open = (title, body, buttons = []) => {
+  const open = (title, body, buttons=[]) => {
     ov.innerHTML = `
       <div class="mrc-card">
         <div class="mrc-h">maimai Result Client</div>
         <div class="mrc-b">${body}</div>
-        <div class="mrc-row">${buttons.map((b,i)=>`<button class="mrc-btn ${b.cls||'gray'}" data-i="${i}">${b.label}</button>`).join("")}</div>
+        <div class="mrc-row">
+          ${buttons.map((b,i)=>`<button class="mrc-btn ${b.cls||'gray'}" data-i="${i}">${b.label}</button>`).join("")}
+        </div>
       </div>`;
     document.body.appendChild(ov);
-    ov.onclick = e => {
-      const i = e.target && e.target.dataset ? e.target.dataset.i : null;
-      if (i != null) buttons[+i].onClick?.();
-    };
+    ov.querySelectorAll("button[data-i]").forEach(btn=>{
+      btn.addEventListener("click", e=>{
+        const i = +btn.dataset.i; buttons[i]?.onClick?.();
+      }, {once:false});
+    });
   };
   const close = () => ov.remove();
 
   // ---------- auto register ----------
   const getOrRegister = async () => {
-    let api = localStorage.getItem(LS.api);
+    let api   = localStorage.getItem(LS.api);
     let token = localStorage.getItem(LS.token);
-    let uid = localStorage.getItem(LS.uid);
-
+    let uid   = localStorage.getItem(LS.uid);
     if (api && token && uid) return { api, token, uid };
 
     uid = uid || uuid();
+    localStorage.setItem(LS.uid, uid);
+
     try {
       const res = await fetch(REGISTER, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: uid, ua: navigator.userAgent, platform: navigator.platform || "" })
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify({ user_id: uid, ua: navigator.userAgent, platform: navigator.platform||"" })
       });
       if (!res.ok) throw new Error("register failed: " + res.status);
       const j = await res.json();
-      if (!j.ok || !j.token) throw new Error("register invalid");
-      api = INGEST;
+      if (!j.ok || !j.token) throw new Error("register invalid response");
+      api   = INGEST;
       token = j.token;
 
       localStorage.setItem(LS.api, api);
       localStorage.setItem(LS.token, token);
-      localStorage.setItem(LS.uid, uid);
       return { api, token, uid };
     } catch (e) {
-      open("MRC", `
-        初期設定の自動取得に失敗しました（/register NG）<br>
-        <small>${String(e)}</small>`,
+      open("MRC",
+        `初期設定の自動取得に失敗しました（/register NG）<br><small>${String(e)}</small>`,
         [{label:"閉じる", cls:"gray", onClick:close}]);
       throw e;
     }
   };
 
-  // ---------- collect links (履歴 50件) ----------
-  const collectLinks = () => {
-    // playlogDetail への a[href], onclick のどちらにも対応
-    const anchors = $$('a[href*="playlogDetail"]');
-    const onclicks = $$('a[onclick*="playlogDetail"]');
-    const urls = [];
+  // ---------- link discovery ----------
+  const extractLinksOnce = () => {
+    // playlogDetail を含む href / onclick を拾う
+    const urls = new Set();
 
-    anchors.forEach(a => {
+    $$('a[href*="playlogDetail"]').forEach(a=>{
+      const href = a.getAttribute("href")||"";
       try {
-        const u = new URL(a.getAttribute("href"), location.href);
-        if (/playlogDetail/.test(u.pathname)) urls.push(u.toString());
+        const u = new URL(href, location.href);
+        if (/playlogDetail/.test(u.href)) urls.add(u.href);
       } catch {}
     });
 
-    onclicks.forEach(a => {
-      try {
-        const m = String(a.getAttribute("onclick") || "").match(/playlogDetail\(['"]([^'"]+)['"]/);
-        if (m) urls.push(new URL(m[1], location.href).toString());
-      } catch {}
+    $$('a[onclick*="playlogDetail"]').forEach(a=>{
+      const oc = String(a.getAttribute("onclick")||"");
+      const m  = oc.match(/playlogDetail\(['"]([^'"]+)['"]/);
+      if (m) { try {
+        const u = new URL(m[1], location.href);
+        if (/playlogDetail/.test(u.href)) urls.add(u.href);
+      } catch {} }
     });
 
-    // だいたい 50 を上限に揃える
-    return urls.slice(0, 50);
+    return Array.from(urls);
   };
 
-  // ---------- ingest ----------
-  const postHtml = async (api, token, url) => {
-    const html = document.documentElement.outerHTML;
+  // 自動スクロールで下まで読み込み→再探索
+  const collectLinks = async () => {
+    let links = extractLinksOnce();
+    // 既に十分ならそのまま
+    if (links.length >= 50) return links.slice(0,50);
+
+    let lastH = -1;
+    for (let i=0;i<8;i++){          // 最大8回スクロール
+      window.scrollTo(0, document.body.scrollHeight);
+      await sleep(600);
+      const h = document.body.scrollHeight;
+      links = extractLinksOnce();
+      if (links.length >= 50) break;
+      if (h === lastH) break;       // もう増えない
+      lastH = h;
+    }
+    return links.slice(0,50);
+  };
+
+  // ---------- ingest (detail HTML を取得して送る) ----------
+  const postDetail = async (api, token, url) => {
+    // 同一オリジンなので fetch 可。詳細ページのHTMLを取得。
+    const r = await fetch(url, { credentials: "same-origin" });
+    if (!r.ok) return false;
+    const html = await r.text();
+
     const res = await fetch(api, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + token,
+        "Content-Type":"application/json",
+        "Authorization":"Bearer "+token
       },
-      body: JSON.stringify({ url, html })
+      body: JSON.stringify({
+        url, html,
+        sourceUrl: location.href,
+        ingestedAt: new Date().toISOString().slice(0,19).replace("T"," ")
+      })
     });
     return res.ok;
   };
 
+  // ---------- main ----------
   (async () => {
-    // 0) セットアップ＆登録
     let env;
-    try {
-      env = await getOrRegister();
-    } catch { return; }
+    try { env = await getOrRegister(); } catch { return; }
 
-    // 1) 事前ダイアログ
-    const urls = collectLinks();
-    if (!urls.length) {
-      open("MRC", `履歴の詳細リンクが見つかりませんでした。<br>一度 <b>最下部までスクロール</b>してから再実行してください。`, [
-        {label:"閉じる", cls:"gray", onClick:close},
-        {label:"結果ページへ", cls:"green", onClick:()=>location.href = `${VIEW}?user_id=${localStorage.getItem(LS.uid)}`}
-      ]);
-      return;
-    }
-
-    let ok = 0, ng = 0;
-    const bar = document.createElement("div");
-    bar.className = "mrc-bar";
-
+    // 1) 事前確認
     open("MRC",
-      `履歴データ（${urls.length}件）を取得・送信します。<div class="mrc-p"><div class="mrc-bar" id="mrc-bar"></div></div>`,
+      `履歴データを取得・送信します。<br>準備ができたら「開始」を押してください。`,
       [
-        { label:"戻る", cls:"gray", onClick:close },
-        { label:"取得中…", cls:"green", onClick:()=>{} }
-      ]);
-    $("#mrc-bar").replaceWith(bar);
+        {label:"戻る",  cls:"gray",  onClick:close},
+        {label:"開始",  cls:"green", onClick: async () => {
+          // ボタン二重押し防止
+          const me = event.currentTarget; me.disabled = true;
 
-    // 2) 送信
-    for (let i=0;i<urls.length;i++){
-      try{
-        const ok1 = await postHtml(env.api, env.token, urls[i]);
-        ok1 ? ok++ : ng++;
-      }catch{ ng++; }
-      bar.style.width = Math.round(((i+1)/urls.length)*100) + "%";
-      await sleep(60); // UI 進捗のため少し待つ
-    }
+          // 進捗UI
+          const bar = document.createElement("div");
+          bar.className = "mrc-bar";
+          ov.querySelector(".mrc-b").innerHTML =
+            `履歴リンクを探索中…<div class="mrc-p"><div class="mrc-bar" id="mrc-bar"></div></div>`;
+          $("#mrc-bar")?.replaceWith(bar);
 
-    // 3) 完了ダイアログ
-    open("MRC",
-      `完了：<b>${ok}/${urls.length}</b>　失敗：${ng} 件`,
-      [
-        {label:"戻る", cls:"gray", onClick:close},
-        {label:"結果ページへ", cls:"green", onClick:()=>location.href = `${VIEW}?user_id=${localStorage.getItem(LS.uid)}`}
+          // リンク収集（自動スクロール込み）
+          const urls = await collectLinks();
+          if (!urls.length) {
+            open("MRC",
+              `履歴の詳細リンクが見つかりませんでした。<br>一度 <b>最下部までスクロール</b>してから再実行してください。`,
+              [
+                {label:"閉じる", cls:"gray", onClick:close},
+                {label:"結果ページへ", cls:"green", onClick:()=>location.href = `${VIEW}?user_id=${localStorage.getItem(LS.uid)||''}`}
+              ]);
+            return;
+          }
+
+          // 2) 送信
+          let ok=0, ng=0;
+          ov.querySelector(".mrc-b").innerHTML =
+            `履歴データ（${urls.length}件）を取得・送信します。<div class="mrc-p"><div class="mrc-bar" id="mrc-bar"></div></div>`;
+          $("#mrc-bar")?.replaceWith(bar);
+
+          for (let i=0;i<urls.length;i++){
+            try {
+              (await postDetail(env.api, env.token, urls[i])) ? ok++ : ng++;
+            } catch { ng++; }
+            bar.style.width = Math.round(((i+1)/urls.length)*100) + "%";
+            await sleep(50);
+          }
+
+          // 3) 完了
+          open("MRC",
+            `完了：<b>${ok}/${urls.length}</b>　失敗：${ng} 件`,
+            [
+              {label:"戻る", cls:"gray", onClick:close},
+              {label:"結果ページへ", cls:"green", onClick:()=>location.href = `${VIEW}?user_id=${localStorage.getItem(LS.uid)||''}`}
+            ]);
+        }}
       ]);
   })();
 })();
