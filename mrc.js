@@ -1,4 +1,4 @@
-/* mrc.js — auto register + auto scroll (window & iframes) + robust link finder + fetch detail + ingest */
+/* mrc.js — page guard + auto register + auto scroll (window & iframes) + robust link finder + fetch detail + ingest */
 (() => {
   const API_BASE = "https://maimai-result.onrender.com";
   const REGISTER = API_BASE + "/register";
@@ -28,7 +28,7 @@
 .mrc-btn.green{background:#10b981;color:#00150e}
 .mrc-p{height:6px;background:#2b2b2b;border-radius:4px;overflow:hidden;margin-top:8px}
 .mrc-bar{height:100%;width:0%;background:#22c55e;transition:width .2s}
-.mrc-note{font-size:12px;opacity:.8;margin-top:8px}
+.mrc-note{font-size:12px;opacity:.8;margin-top:8px;word-break:break-all}
 `;
   document.head.appendChild(css);
   const open = (body, btns=[]) => {
@@ -45,6 +45,20 @@
     };
   };
   const close = () => ov.remove();
+
+  // ========= page guard (ここが重要) =========
+  const onRecordPage = () => /\/maimai-mobile\/record\//.test(location.pathname);
+  if (!onRecordPage()) {
+    open(
+      `いまの画面では履歴リンクを拾えません。<br>
+       下のボタンで <b>プレイ履歴</b> を開いてから実行してください。<div class="mrc-note">${location.href}</div>`,
+      [
+        {label:"閉じる", cls:"gray", onClick:close},
+        {label:"プレイ履歴へ", cls:"green", onClick:()=>{ location.href="/maimai-mobile/record/"; }}
+      ]
+    );
+    return;
+  }
 
   // ========= server =========
   async function waitAlive() {
@@ -76,26 +90,21 @@
     return {api,token,uid};
   }
 
-  // ========= DOM traversal helpers (document + iframes recursively) =========
+  // ========= document + iframe 走査 =========
   function getAllDocs(rootDoc) {
     const docs = [];
     const stack = [rootDoc||document];
     while (stack.length) {
       const d = stack.pop();
       docs.push(d);
-      // 同一オリジンの iframe を再帰
       const iframes = Array.from(d.querySelectorAll("iframe"));
       for (const f of iframes) {
-        try {
-          if (f.contentDocument) stack.push(f.contentDocument);
-        } catch(_) {/* cross-origin は無視 */}
+        try { if (f.contentDocument) stack.push(f.contentDocument); } catch {}
       }
     }
     return docs;
   }
-
   async function autoScrollAll() {
-    // window 自身 + 同一オリジン iframe の scrollingElement を全部下まで
     const docs = getAllDocs(document);
     for (let step=0; step<40; step++){
       for (const d of docs) {
@@ -108,14 +117,14 @@
     }
   }
 
-  // ========= robust link finder (documents 全部を見る) =========
+  // ========= robust link finder =========
   function collectLinksRobust() {
     const set = new Set();
     const docs = getAllDocs(document);
     let cHref=0, cOnclk=0, cRegex=0;
 
     for (const d of docs) {
-      // 1) 直接 href の a を総ざらい（a.href で絶対URL化して判定）
+      // a.href ですべて
       const as = Array.from(d.getElementsByTagName("a"));
       for (const a of as) {
         try {
@@ -123,37 +132,29 @@
           if (href && /\/playlogdetail\//i.test(href)) { set.add(href); cHref++; }
         } catch {}
       }
-      // 2) onclick 属性に playlogDetail（button/input/div なども）
-      const onEls = Array.from(d.querySelectorAll('[onclick]'));
+      // onclick 中の playlogDetail(...)
+      const onEls = Array.from(d.querySelectorAll("[onclick]"));
       for (const el of onEls) {
         const txt = String(el.getAttribute("onclick")||"");
         const m = txt.match(/playlogdetail\(['"]([^'"]+)['"]/i);
-        if (m && m[1]) {
-          try { set.add(new URL(m[1], location.href).toString()); cOnclk++; } catch {}
-        }
+        if (m && m[1]) { try{ set.add(new URL(m[1], location.href).toString()); cOnclk++; }catch{} }
       }
-      // 3) HTML 全体を正規表現で（最後の砦）
+      // HTMLを正規表現で（最後の砦）
       const html = d.documentElement ? d.documentElement.innerHTML : "";
-      // href="...playlogDetail..."
       (html.match(/href=["']([^"']*playlogdetail[^"']*)["']/ig) || []).forEach(h=>{
         const m = h.match(/href=["']([^"']+)["']/i);
         if (m && m[1]) { try{ set.add(new URL(m[1], location.href).toString()); cRegex++; }catch{} }
       });
-      // playlogDetail('...')
       for (const m of html.matchAll(/playlogdetail\(['"]([^'"]+)['"]\)/ig)) {
         try{ set.add(new URL(m[1], location.href).toString()); cRegex++; }catch{}
       }
     }
-    // デバッグカウンタを保存（UIに出す用）
     window.__MRC_LAST_COUNTS__ = {href:cHref, onclick:cOnclk, regex:cRegex};
     return Array.from(set).slice(0,50);
   }
+  function diagCounts(){ return window.__MRC_LAST_COUNTS__ || {href:0,onclick:0,regex:0}; }
 
-  function diagCounts(){
-    return window.__MRC_LAST_COUNTS__ || {href:0,onclick:0,regex:0};
-  }
-
-  // ========= 詳細ページを取得して送信 =========
+  // ========= 詳細を取得して送信 =========
   async function fetchDetailHtml(url) {
     const r = await fetch(url, { credentials:"include", cache:"no-store" });
     if (!r.ok) throw new Error("detail fetch "+r.status);
@@ -170,46 +171,40 @@
 
   // ========= main =========
   (async () => {
-    // 0) register
     let env;
     try { env = await getOrRegister(); }
     catch(e){
-      open(`初期設定の自動取得に失敗しました（/register NG）<div class="mrc-note">${String(e)}</div>`,[
-        {label:"閉じる", cls:"gray", onClick:close}
-      ]);
+      open(`初期設定の自動取得に失敗しました（/register NG）<div class="mrc-note">${String(e)}</div>`,
+        [{label:"閉じる", cls:"gray", onClick:close}]);
       return;
     }
 
-    // 1) 事前確認
     open(`履歴データを取得・送信します。`,[
       {label:"やめる", cls:"gray", onClick:close},
       {label:"開始", cls:"green", onClick: async()=>{
-        // ページ & iframe を自動スクロール
         await autoScrollAll();
 
-        // リンク収集（document + iframes）
-        let urls = collectLinksRobust();
-
+        const urls = collectLinksRobust();
         if (!urls.length){
           const d = diagCounts();
           open(`履歴の詳細リンクが見つかりませんでした。<br>
                一度ページを一番下まで表示してから再実行してください。<div class="mrc-note">
-               検出内訳: href=${d.href}, onclick=${d.onclick}, regex=${d.regex}</div>`,[
-            {label:"閉じる", cls:"gray", onClick:close},
-            {label:"再試行", cls:"green", onClick:()=>location.reload()}
-          ]);
+               検出内訳: href=${d.href}, onclick=${d.onclick}, regex=${d.regex}<br>${location.href}</div>`,
+            [
+              {label:"閉じる", cls:"gray", onClick:close},
+              {label:"再試行", cls:"green", onClick:()=>location.reload()}
+            ]);
           return;
         }
 
-        // 進捗表示
         const bar = document.createElement("div"); bar.className="mrc-bar";
-        open(`履歴データ（${urls.length}件）を取得・送信中…<div class="mrc-p"><div class="mrc-bar" id="mrc-bar"></div></div>`,[
-          {label:"閉じる", cls:"gray", onClick:close},
-          {label:"結果ページへ", cls:"green", onClick:()=>location.href=`${VIEW}?user_id=${localStorage.getItem(LS.uid)}`}
-        ]);
+        open(`履歴データ（${urls.length}件）を取得・送信中…<div class="mrc-p"><div class="mrc-bar" id="mrc-bar"></div></div>`,
+          [
+            {label:"閉じる", cls:"gray", onClick:close},
+            {label:"結果ページへ", cls:"green", onClick:()=>location.href=`${VIEW}?user_id=${localStorage.getItem(LS.uid)}`}
+          ]);
         $("#mrc-bar")?.replaceWith(bar);
 
-        // 2) 取得→送信
         let ok=0, ng=0;
         for (let i=0;i<urls.length;i++){
           try{
@@ -221,11 +216,11 @@
           await sleep(120);
         }
 
-        // 3) 完了
-        open(`完了：<b>${ok}/${urls.length}</b>　失敗：${ng} 件`,[
-          {label:"閉じる", cls:"gray", onClick:close},
-          {label:"結果ページへ", cls:"green", onClick:()=>location.href=`${VIEW}?user_id=${localStorage.getItem(LS.uid)}`}
-        ]);
+        open(`完了：<b>${ok}/${urls.length}</b>　失敗：${ng} 件`,
+          [
+            {label:"閉じる", cls:"gray", onClick:close},
+            {label:"結果ページへ", cls:"green", onClick:()=>location.href=`${VIEW}?user_id=${localStorage.getItem(LS.uid)}`}
+          ]);
       }}
     ]);
   })();
