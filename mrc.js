@@ -1,4 +1,4 @@
-/* mrc.js — auto register + auto scroll + robust link finder + fetch detail + ingest */
+/* mrc.js — auto register + auto scroll (window & iframes) + robust link finder + fetch detail + ingest */
 (() => {
   const API_BASE = "https://maimai-result.onrender.com";
   const REGISTER = API_BASE + "/register";
@@ -76,63 +76,84 @@
     return {api,token,uid};
   }
 
-  // ========= helpers =========
-  async function autoScroll() {
-    let last = -1, same = 0;
-    for (let i=0;i<40;i++){
-      window.scrollTo(0, document.body.scrollHeight);
+  // ========= DOM traversal helpers (document + iframes recursively) =========
+  function getAllDocs(rootDoc) {
+    const docs = [];
+    const stack = [rootDoc||document];
+    while (stack.length) {
+      const d = stack.pop();
+      docs.push(d);
+      // 同一オリジンの iframe を再帰
+      const iframes = Array.from(d.querySelectorAll("iframe"));
+      for (const f of iframes) {
+        try {
+          if (f.contentDocument) stack.push(f.contentDocument);
+        } catch(_) {/* cross-origin は無視 */}
+      }
+    }
+    return docs;
+  }
+
+  async function autoScrollAll() {
+    // window 自身 + 同一オリジン iframe の scrollingElement を全部下まで
+    const docs = getAllDocs(document);
+    for (let step=0; step<40; step++){
+      for (const d of docs) {
+        try {
+          const el = d.scrollingElement || d.documentElement || d.body;
+          el.scrollTo(0, el.scrollHeight);
+        } catch {}
+      }
       await sleep(500);
-      const h = document.body.scrollHeight;
-      if (h===last){ if(++same>=2) break; } else { same=0; last=h; }
     }
   }
+
+  // ========= robust link finder (documents 全部を見る) =========
   function collectLinksRobust() {
     const set = new Set();
+    const docs = getAllDocs(document);
+    let cHref=0, cOnclk=0, cRegex=0;
 
-    // 1) 直接 href
-    $$('a[href*="playlogDetail"]').forEach(a=>{
-      try{
-        const href = a.getAttribute('href');
-        if (!href) return;
-        const u = new URL(href, location.href);
-        if (/playlogDetail/.test(u.pathname)) set.add(u.toString());
-      }catch{}
-    });
-
-    // 2) どんな要素でも onclick に playlogDetail
-    $$('[onclick*="playlogDetail"]').forEach(el=>{
-      try{
-        const m = String(el.getAttribute('onclick')||"").match(/playlogDetail\(['"]([^'"]+)['"]/);
-        if (m && m[1]) set.add(new URL(m[1], location.href).toString());
-      }catch{}
-    });
-
-    // 3) HTML 全体を正規表現でスキャン（最後の砦）
-    const html = document.documentElement.innerHTML;
-
-    // href="...playlogDetail..."
-    (html.match(/href=["']([^"']*playlogDetail[^"']*)["']/g) || []).forEach(h=>{
-      const m = h.match(/href=["']([^"']+)["']/);
-      if (m && m[1]) { try{ set.add(new URL(m[1], location.href).toString()); }catch{} }
-    });
-
-    // playlogDetail('...')
-    for (const m of html.matchAll(/playlogDetail\(['"]([^'"]+)['"]\)/g)) {
-      try{ set.add(new URL(m[1], location.href).toString()); }catch{}
+    for (const d of docs) {
+      // 1) 直接 href の a を総ざらい（a.href で絶対URL化して判定）
+      const as = Array.from(d.getElementsByTagName("a"));
+      for (const a of as) {
+        try {
+          const href = a.href || a.getAttribute("href") || "";
+          if (href && /\/playlogdetail\//i.test(href)) { set.add(href); cHref++; }
+        } catch {}
+      }
+      // 2) onclick 属性に playlogDetail（button/input/div なども）
+      const onEls = Array.from(d.querySelectorAll('[onclick]'));
+      for (const el of onEls) {
+        const txt = String(el.getAttribute("onclick")||"");
+        const m = txt.match(/playlogdetail\(['"]([^'"]+)['"]/i);
+        if (m && m[1]) {
+          try { set.add(new URL(m[1], location.href).toString()); cOnclk++; } catch {}
+        }
+      }
+      // 3) HTML 全体を正規表現で（最後の砦）
+      const html = d.documentElement ? d.documentElement.innerHTML : "";
+      // href="...playlogDetail..."
+      (html.match(/href=["']([^"']*playlogdetail[^"']*)["']/ig) || []).forEach(h=>{
+        const m = h.match(/href=["']([^"']+)["']/i);
+        if (m && m[1]) { try{ set.add(new URL(m[1], location.href).toString()); cRegex++; }catch{} }
+      });
+      // playlogDetail('...')
+      for (const m of html.matchAll(/playlogdetail\(['"]([^'"]+)['"]\)/ig)) {
+        try{ set.add(new URL(m[1], location.href).toString()); cRegex++; }catch{}
+      }
     }
-
-    const arr = Array.from(set);
-    // 50件に揃える（新しい方が上に来るので末尾からも良いが、ここはそのまま）
-    return arr.slice(0,50);
+    // デバッグカウンタを保存（UIに出す用）
+    window.__MRC_LAST_COUNTS__ = {href:cHref, onclick:cOnclk, regex:cRegex};
+    return Array.from(set).slice(0,50);
   }
+
   function diagCounts(){
-    const c1 = $$('a[href*="playlogDetail"]').length;
-    const c2 = $$('[onclick*="playlogDetail"]').length;
-    const html = document.documentElement.innerHTML;
-    const c3 = (html.match(/playlogDetail\(/g)||[]).length;
-    return {c1,c2,c3};
+    return window.__MRC_LAST_COUNTS__ || {href:0,onclick:0,regex:0};
   }
 
+  // ========= 詳細ページを取得して送信 =========
   async function fetchDetailHtml(url) {
     const r = await fetch(url, { credentials:"include", cache:"no-store" });
     if (!r.ok) throw new Error("detail fetch "+r.status);
@@ -163,15 +184,17 @@
     open(`履歴データを取得・送信します。`,[
       {label:"やめる", cls:"gray", onClick:close},
       {label:"開始", cls:"green", onClick: async()=>{
-        // 自動で最下部まで読み込み
-        await autoScroll();
+        // ページ & iframe を自動スクロール
+        await autoScrollAll();
+
+        // リンク収集（document + iframes）
         let urls = collectLinksRobust();
 
         if (!urls.length){
           const d = diagCounts();
           open(`履歴の詳細リンクが見つかりませんでした。<br>
                一度ページを一番下まで表示してから再実行してください。<div class="mrc-note">
-               検出内訳: href=${d.c1}, onclick=${d.c2}, regex=${d.c3}</div>`,[
+               検出内訳: href=${d.href}, onclick=${d.onclick}, regex=${d.regex}</div>`,[
             {label:"閉じる", cls:"gray", onClick:close},
             {label:"再試行", cls:"green", onClick:()=>location.reload()}
           ]);
@@ -190,12 +213,12 @@
         let ok=0, ng=0;
         for (let i=0;i<urls.length;i++){
           try{
-            const html = await fetchDetailHtml(urls[i]);          // ← 詳細ページを取得
+            const html = await fetchDetailHtml(urls[i]);
             const sent = await postDetail(env.api, env.token, urls[i], html);
             sent ? ok++ : ng++;
           }catch{ ng++; }
           bar.style.width = Math.round(((i+1)/urls.length)*100) + "%";
-          await sleep(120); // サイト負荷とUIのために少し待つ
+          await sleep(120);
         }
 
         // 3) 完了
