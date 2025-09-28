@@ -112,56 +112,88 @@
   function collectLinksRobust() {
     const set = new Set();
     const docs = getAllDocs(document);
-    let cHref=0, cOnclk=0, cRegex=0, cText=0;
+    let cHref=0, cOnclick=0, cRegex=0, cIdx=0, cText=0;
+
+    // 便利: idx からURLを作る
+    const makeByIdx = (v) => new URL(
+      `/maimai-mobile/record/playlogDetail/?idx=${encodeURIComponent(v)}`,
+      location.origin
+    ).toString();
 
     for (const d of docs) {
+      // a / button / input などひと通り走査
       const els = Array.from(d.querySelectorAll('a,button,input[type=button],input[type=submit]'));
       for (const el of els) {
-        const tag = el.tagName;
-        const href = (tag === 'A') ? (el.href || el.getAttribute('href') || '') : '';
+        const tag   = el.tagName;
+        const href  = (tag === 'A') ? (el.href || el.getAttribute('href') || '') : '';
         const label = (el.textContent || el.value || '').replace(/\s+/g, '');
 
-        // a[href] に playlogDetail
-        if (href && /\/playlogdetail\//i.test(href)) { set.add(href); cHref++; continue; }
+        // 1) a[href] に playlogDetail（? の前でも後でも拾えるように \b）
+        if (href && /\/playlogdetail\b/i.test(href)) { set.add(href); cHref++; continue; }
 
-        // data-href
+        // 2) data-href
         const dataHref = (el.dataset && el.dataset.href) || el.getAttribute?.('data-href');
-        if (dataHref && /\/playlogdetail\//i.test(dataHref)) {
+        if (dataHref && /\/playlogdetail\b/i.test(dataHref)) {
           try { set.add(new URL(dataHref, location.href).toString()); cHref++; continue; } catch {}
         }
 
-        // テキスト「詳細」で普通の href
+        // 3) 「詳細」テキストで普通の href（念のため）
         if (/詳細|Detail/i.test(label) && href && !/^javascript:|^#/.test(href)) {
           set.add(href); cText++; continue;
         }
 
-        // onclick の playlogDetail(...)
+        // 4) onclick="playlogDetail('…')" 形式
         const oc = el.getAttribute && (el.getAttribute('onclick') || '');
-        const m1 = oc.match(/playlogdetail\(['"]([^'"]+)['"]/i);
-        if (m1) { try { set.add(new URL(m1[1], location.href).toString()); cOnclk++; continue; } catch {} }
-
-        // data-idx から合成
-        const idx = (el.dataset && el.dataset.idx) || el.getAttribute?.('data-idx');
-        if (idx) {
-          set.add(new URL(`/maimai-mobile/record/playlogDetail/?idx=${encodeURIComponent(idx)}`, location.origin).toString());
-          cText++; continue;
+        const m1 = oc.match(/playlogdetail\(['"]([^'"]+)['"]\)/i);
+        if (m1 && m1[1]) {
+          const v = m1[1];
+          try {
+            // 引数が URL ならそのまま、idx のみなら合成
+            set.add(/playlogdetail/i.test(v) || /idx=/.test(v) ? new URL(v, location.href).toString() : makeByIdx(v));
+            cOnclick++;
+            continue;
+          } catch {}
         }
+
+        // 5) data-idx / idx 属性
+        const dIdx = (el.dataset && el.dataset.idx) || el.getAttribute?.('data-idx');
+        if (dIdx) { try{ set.add(makeByIdx(dIdx)); cIdx++; continue; }catch{} }
       }
 
-      // HTMLを直接走査（最後の砦）
+      // 6) form + hidden input name=idx
+      d.querySelectorAll('form').forEach(f=>{
+        try{
+          const act = f.getAttribute('action') || '';
+          const idxInput = f.querySelector('input[name="idx"]');
+          const v = idxInput && (idxInput.value || idxInput.getAttribute('value'));
+          if (v) { set.add(makeByIdx(v)); cIdx++; }
+        }catch{}
+      });
+
+      // 7) input[name=idx] 直取り（フォーム外にあっても拾う）
+      d.querySelectorAll('input[name="idx"]').forEach(i=>{
+        const v = i.value || i.getAttribute('value');
+        if (v) { try{ set.add(makeByIdx(v)); cIdx++; }catch{} }
+      });
+
+      // 8) HTML 正規表現（最後の砦）
       const html = d.documentElement?.innerHTML || '';
-      for (const m of html.matchAll(/href=["']([^"']*\/playlogdetail\/[^"']*)["']/ig)) {
+      for (const m of html.matchAll(/href=["']([^"']*\/playlogdetail[^"']*)["']/ig)) {
         try { set.add(new URL(m[1], location.href).toString()); cRegex++; } catch {}
       }
       for (const m of html.matchAll(/playlogdetail\(['"]([^'"]+)['"]\)/ig)) {
-        try { set.add(new URL(m[1], location.href).toString()); cRegex++; } catch {}
+        try {
+          const v = m[1];
+          set.add(/playlogdetail/i.test(v) || /idx=/.test(v) ? new URL(v, location.href).toString() : makeByIdx(v));
+          cRegex++;
+        } catch {}
       }
       for (const m of html.matchAll(/\/maimai-mobile\/record\/playlogDetail\/\?idx=([0-9,%]+)/ig)) {
         try { set.add(new URL(m[0], location.origin).toString()); cRegex++; } catch {}
       }
     }
 
-    window.__MRC_LAST_COUNTS__ = { href:cHref, onclick:cOnclk, regex:cRegex, text:cText };
+    window.__MRC_LAST_COUNTS__ = { href:cHref, onclick:cOnclick, regex:cRegex, idx:cIdx, text:cText };
     return Array.from(set).slice(0, 50);
   }
 
@@ -200,7 +232,7 @@
           const c = (window.__MRC_LAST_COUNTS__||{});
           open(`履歴の詳細リンクが見つかりませんでした。<br>
           一度 <b>最下部までスクロール</b>してから再実行してください。<br>
-          <small>検出内訳: href=${c.href||0}, onclick=${c.onclick||0}, regex=${c.regex||0}, text=${c.text||0}</small>`,[
+          <small>検出内訳: href=${c.href||0}, onclick=${c.onclick||0}, idx=${c.idx||0}, regex=${c.regex||0}, text=${c.text||0}</small>`,[
             {label:"閉じる", cls:"gray", onClick:close},
             {label:"再試行", cls:"green", onClick: async()=>{
               await autoScroll(50, 800);
@@ -210,7 +242,7 @@
                 open(`まだ見つかりませんでした。<br>
                   Safariの「共有」→「デスクトップ用Webサイトを表示」を試し、<br>
                   もう一度最下部までスクロール後に再実行してください。<br>
-                  <small>検出内訳: href=${cc.href||0}, onclick=${cc.onclick||0}, regex=${cc.regex||0}, text=${cc.text||0}</small>`,
+                  <small>検出内訳: href=${cc.href||0}, onclick=${cc.onclick||0}, idx=${cc.idx||0}, regex=${cc.regex||0}, text=${cc.text||0}</small>`,
                   [{label:"閉じる", cls:"gray", onClick:close}]);
               } else {
                 startIngest(u2);
