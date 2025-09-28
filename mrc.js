@@ -1,4 +1,4 @@
-/* mrc.js — auto register + auto scroll + parse items -> ingest */
+/* mrc.js — auto register + auto scroll + robust link finder + fetch detail + ingest */
 (() => {
   const API_BASE = "https://maimai-result.onrender.com";
   const REGISTER = API_BASE + "/register";
@@ -14,9 +14,8 @@
         const r=Math.random()*16|0, v=c==="x"?r:(r&0x3|0x8); return v.toString(16);
       });
 
-  // ---------- overlay UI ----------
-  const ov = document.createElement("div");
-  ov.id = "mrc-ov";
+  // ========= UI =========
+  const ov = document.createElement("div"); ov.id = "mrc-ov";
   const css = document.createElement("style");
   css.textContent = `
 #${ov.id}{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:99999}
@@ -29,6 +28,7 @@
 .mrc-btn.green{background:#10b981;color:#00150e}
 .mrc-p{height:6px;background:#2b2b2b;border-radius:4px;overflow:hidden;margin-top:8px}
 .mrc-bar{height:100%;width:0%;background:#22c55e;transition:width .2s}
+.mrc-note{font-size:12px;opacity:.8;margin-top:8px}
 `;
   document.head.appendChild(css);
   const open = (body, btns=[]) => {
@@ -46,173 +46,160 @@
   };
   const close = () => ov.remove();
 
-  // ---------- server warmup ----------
-  async function waitAlive(base) {
-    for (let i=0;i<25;i++){
-      try { const r = await fetch(base+"/health",{cache:"no-store"}); if (r.ok) return; } catch{}
-      await sleep(i<10?1500:3000);
+  // ========= server =========
+  async function waitAlive() {
+    for (let i=0;i<20;i++) {
+      try { const r = await fetch(API_BASE+"/health",{cache:"no-store"}); if (r.ok) return; } catch{}
+      await sleep(i<8?1000:2500);
     }
     throw new Error("server not responding");
   }
-
-  // ---------- /register（2系統に対応） ----------
   async function getOrRegister() {
-    let api   = localStorage.getItem(LS.api);
-    let token = localStorage.getItem(LS.token);
-    let uid   = localStorage.getItem(LS.uid);
-    if (api && token && uid) return { api, token, uid };
-
-    await waitAlive(API_BASE);
+    let api=localStorage.getItem(LS.api), token=localStorage.getItem(LS.token), uid=localStorage.getItem(LS.uid);
+    if (api && token && uid) return {api,token,uid};
+    await waitAlive();
     uid = uid || uuid();
-
     const res = await fetch(REGISTER, {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
+      method:"POST", headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({ user_id: uid, ua: navigator.userAgent, platform: navigator.platform||"" })
     });
-    if (!res.ok) throw new Error("register failed: "+(await res.text()));
+    if (!res.ok) throw new Error("register failed: "+res.status);
     const j = await res.json().catch(()=> ({}));
-
     const _token = j.token ?? j.bearer;
     let   _api   = j.api_url ?? j.ingest_url ?? "/ingest";
     if (!_token) throw new Error("register invalid response");
     if (!_api.startsWith("http")) _api = API_BASE + _api;
-
-    api = _api; token = _token; uid = j.user_id || uid;
+    api=_api; token=_token; uid=j.user_id || uid;
     localStorage.setItem(LS.api, api);
     localStorage.setItem(LS.token, token);
     localStorage.setItem(LS.uid, uid);
-    return { api, token, uid };
+    return {api,token,uid};
   }
 
-  // ---------- auto scroll to bottom ----------
+  // ========= helpers =========
   async function autoScroll() {
     let last = -1, same = 0;
-    for (let i=0;i<30;i++){
+    for (let i=0;i<40;i++){
       window.scrollTo(0, document.body.scrollHeight);
-      await sleep(600);
+      await sleep(500);
       const h = document.body.scrollHeight;
-      if (h === last) { if (++same >= 2) break; } else { same = 0; last = h; }
+      if (h===last){ if(++same>=2) break; } else { same=0; last=h; }
     }
   }
+  function collectLinksRobust() {
+    const set = new Set();
 
-  // ---------- helpers ----------
-  const pick = (el, sel) => {
-    const n = el.querySelector(sel);
-    if (!n) return "";
-    return (n.value ?? n.textContent ?? "").toString().trim();
-  };
-  const findDate = (txt) => {
-    const m = txt.match(/(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2})/);
-    return m ? m[1] : "";
-  };
-  const findRate = (txt) => {
-    const m = txt.replace(/,/g,"").match(/(\d{2,3}\.\d{2,5})\s*%/);
-    return m ? m[1] : "";
-  };
-  const findLevel = (txt) => {
-    const m = txt.match(/LEVEL\s*([0-9]+[+]*)/i);
-    return m ? m[1] : "";
-  };
+    // 1) 直接 href
+    $$('a[href*="playlogDetail"]').forEach(a=>{
+      try{
+        const href = a.getAttribute('href');
+        if (!href) return;
+        const u = new URL(href, location.href);
+        if (/playlogDetail/.test(u.pathname)) set.add(u.toString());
+      }catch{}
+    });
 
-  // ---------- collect 50 items from the list page ----------
-  function collectItems() {
-    // 「詳細」ボタン（href or onclick）を基準に、同じカードDOMから情報を抜く
-    const anchors = [
-      ...$$('a[href*="playlogDetail"]'),
-      ...$$('a[onclick*="playlogDetail"]')
-    ];
-    const items = [];
-    for (const a of anchors) {
-      // カードっぽい大きめのコンテナまで遡る（3〜6階層程度で十分）
-      let card = a;
-      for (let i=0;i<6 && card && card.parentElement;i++){
-        card = card.parentElement;
-        if (card.querySelector('input') && /ACHIEVEMENT/i.test(card.textContent)) break;
-      }
-      if (!card) continue;
+    // 2) どんな要素でも onclick に playlogDetail
+    $$('[onclick*="playlogDetail"]').forEach(el=>{
+      try{
+        const m = String(el.getAttribute('onclick')||"").match(/playlogDetail\(['"]([^'"]+)['"]/);
+        if (m && m[1]) set.add(new URL(m[1], location.href).toString());
+      }catch{}
+    });
 
-      const title = pick(card, 'input') || pick(card, '.music_name') || pick(card, '.title') || "";
-      const txt   = card.textContent || "";
-      const playedAt = findDate(txt);
-      const rate     = findRate(txt);
-      const level    = findLevel(txt);
-      const imgEl    = card.querySelector('img');
-      const imageUrl = imgEl ? (imgEl.currentSrc || imgEl.src || "") : "";
+    // 3) HTML 全体を正規表現でスキャン（最後の砦）
+    const html = document.documentElement.innerHTML;
 
-      if (!title || !playedAt || !rate) continue; // 必須3つが揃わないものは捨てる
+    // href="...playlogDetail..."
+    (html.match(/href=["']([^"']*playlogDetail[^"']*)["']/g) || []).forEach(h=>{
+      const m = h.match(/href=["']([^"']+)["']/);
+      if (m && m[1]) { try{ set.add(new URL(m[1], location.href).toString()); }catch{} }
+    });
 
-      items.push({
-        title, playedAt, rate, level, imageUrl,
-        difficulty: "" // リスト面では拾いづらいので空（サーバー側は空でも表示可）
-      });
-      if (items.length >= 50) break;
+    // playlogDetail('...')
+    for (const m of html.matchAll(/playlogDetail\(['"]([^'"]+)['"]\)/g)) {
+      try{ set.add(new URL(m[1], location.href).toString()); }catch{}
     }
-    return items;
+
+    const arr = Array.from(set);
+    // 50件に揃える（新しい方が上に来るので末尾からも良いが、ここはそのまま）
+    return arr.slice(0,50);
+  }
+  function diagCounts(){
+    const c1 = $$('a[href*="playlogDetail"]').length;
+    const c2 = $$('[onclick*="playlogDetail"]').length;
+    const html = document.documentElement.innerHTML;
+    const c3 = (html.match(/playlogDetail\(/g)||[]).length;
+    return {c1,c2,c3};
   }
 
-  // ---------- send items to /ingest ----------
-  async function postItems(api, token, items) {
-    const body = {
-      items,
-      sourceUrl: location.href,
-      ingestedAt: new Date().toISOString().replace('T',' ').slice(0,19) // "YYYY-MM-DD HH:MM:SS"
-    };
-    const res = await fetch(api, {
+  async function fetchDetailHtml(url) {
+    const r = await fetch(url, { credentials:"include", cache:"no-store" });
+    if (!r.ok) throw new Error("detail fetch "+r.status);
+    return await r.text();
+  }
+  async function postDetail(api, token, url, html) {
+    const r = await fetch(api, {
       method:"POST",
       headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+token },
-      body: JSON.stringify(body)
+      body: JSON.stringify({ url, html })
     });
-    if (!res.ok) throw new Error("ingest failed: "+res.status);
-    return true;
+    return r.ok;
   }
 
-  // ---------- main ----------
+  // ========= main =========
   (async () => {
     // 0) register
     let env;
     try { env = await getOrRegister(); }
     catch(e){
-      open(`初期設定の自動取得に失敗しました（/register NG）<br><small>${String(e)}</small>`,[
+      open(`初期設定の自動取得に失敗しました（/register NG）<div class="mrc-note">${String(e)}</div>`,[
         {label:"閉じる", cls:"gray", onClick:close}
       ]);
       return;
     }
 
-    // 1) 事前ダイアログ
+    // 1) 事前確認
     open(`履歴データを取得・送信します。`,[
       {label:"やめる", cls:"gray", onClick:close},
-      {label:"開始",  cls:"green", onClick: async()=>{
-        await autoScroll();                 // 末尾まで読み込む
-        const items = collectItems();       // 50件まで抽出
-        if (!items.length){
-          open(`履歴の詳細リンクが見つかりませんでした。<br>画面を一番下まで表示してから再実行してください。`,[
+      {label:"開始", cls:"green", onClick: async()=>{
+        // 自動で最下部まで読み込み
+        await autoScroll();
+        let urls = collectLinksRobust();
+
+        if (!urls.length){
+          const d = diagCounts();
+          open(`履歴の詳細リンクが見つかりませんでした。<br>
+               一度ページを一番下まで表示してから再実行してください。<div class="mrc-note">
+               検出内訳: href=${d.c1}, onclick=${d.c2}, regex=${d.c3}</div>`,[
             {label:"閉じる", cls:"gray", onClick:close},
-            {label:"結果ページへ", cls:"green", onClick:()=>location.href=`${VIEW}?user_id=${localStorage.getItem(LS.uid)}`}
+            {label:"再試行", cls:"green", onClick:()=>location.reload()}
           ]);
           return;
         }
 
-        // 進捗UI
+        // 進捗表示
         const bar = document.createElement("div"); bar.className="mrc-bar";
-        open(`履歴データ（${items.length}件）を送信中…<div class="mrc-p"><div class="mrc-bar" id="mrc-bar"></div></div>`,[
+        open(`履歴データ（${urls.length}件）を取得・送信中…<div class="mrc-p"><div class="mrc-bar" id="mrc-bar"></div></div>`,[
           {label:"閉じる", cls:"gray", onClick:close},
           {label:"結果ページへ", cls:"green", onClick:()=>location.href=`${VIEW}?user_id=${localStorage.getItem(LS.uid)}`}
         ]);
         $("#mrc-bar")?.replaceWith(bar);
 
-        // 2) まとめて送信（/ingest は配列対応）
+        // 2) 取得→送信
         let ok=0, ng=0;
-        try {
-          await postItems(env.api, env.token, items);
-          ok = items.length;
-        } catch {
-          ng = items.length;
+        for (let i=0;i<urls.length;i++){
+          try{
+            const html = await fetchDetailHtml(urls[i]);          // ← 詳細ページを取得
+            const sent = await postDetail(env.api, env.token, urls[i], html);
+            sent ? ok++ : ng++;
+          }catch{ ng++; }
+          bar.style.width = Math.round(((i+1)/urls.length)*100) + "%";
+          await sleep(120); // サイト負荷とUIのために少し待つ
         }
-        bar.style.width = "100%";
 
         // 3) 完了
-        open(`完了：<b>${ok}/${items.length}</b>　失敗：${ng} 件`,[
+        open(`完了：<b>${ok}/${urls.length}</b>　失敗：${ng} 件`,[
           {label:"閉じる", cls:"gray", onClick:close},
           {label:"結果ページへ", cls:"green", onClick:()=>location.href=`${VIEW}?user_id=${localStorage.getItem(LS.uid)}`}
         ]);
