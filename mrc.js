@@ -59,10 +59,7 @@
   // ---------- server warmup & register ----------
   async function waitAlive() {
     for (let i=0;i<25;i++) {
-      try {
-        const r = await fetch(API_BASE+"/health", {cache:"no-store"});
-        if (r.ok) return;
-      } catch{}
+      try { const r = await fetch(API_BASE+"/health",{cache:"no-store"}); if (r.ok) return; } catch {}
       await sleep(i<10 ? 1500 : 3000);
     }
     throw new Error("server not responding");
@@ -114,69 +111,54 @@
     const docs = getAllDocs(document);
     let cHref=0, cOnclick=0, cRegex=0, cIdx=0, cText=0;
 
-    // 便利: idx からURLを作る
     const makeByIdx = (v) => new URL(
       `/maimai-mobile/record/playlogDetail/?idx=${encodeURIComponent(v)}`,
       location.origin
     ).toString();
 
     for (const d of docs) {
-      // a / button / input などひと通り走査
       const els = Array.from(d.querySelectorAll('a,button,input[type=button],input[type=submit]'));
       for (const el of els) {
         const tag   = el.tagName;
         const href  = (tag === 'A') ? (el.href || el.getAttribute('href') || '') : '';
         const label = (el.textContent || el.value || '').replace(/\s+/g, '');
 
-        // 1) a[href] に playlogDetail（? の前でも後でも拾えるように \b）
         if (href && /\/playlogdetail\b/i.test(href)) { set.add(href); cHref++; continue; }
 
-        // 2) data-href
         const dataHref = (el.dataset && el.dataset.href) || el.getAttribute?.('data-href');
         if (dataHref && /\/playlogdetail\b/i.test(dataHref)) {
           try { set.add(new URL(dataHref, location.href).toString()); cHref++; continue; } catch {}
         }
 
-        // 3) 「詳細」テキストで普通の href（念のため）
-        if (/詳細|Detail/i.test(label) && href && !/^javascript:|^#/.test(href)) {
-          set.add(href); cText++; continue;
-        }
+        if (/詳細|Detail/i.test(label) && href && !/^javascript:|^#/.test(href)) { set.add(href); cText++; continue; }
 
-        // 4) onclick="playlogDetail('…')" 形式
         const oc = el.getAttribute && (el.getAttribute('onclick') || '');
         const m1 = oc.match(/playlogdetail\(['"]([^'"]+)['"]\)/i);
         if (m1 && m1[1]) {
           const v = m1[1];
           try {
-            // 引数が URL ならそのまま、idx のみなら合成
             set.add(/playlogdetail/i.test(v) || /idx=/.test(v) ? new URL(v, location.href).toString() : makeByIdx(v));
-            cOnclick++;
-            continue;
+            cOnclick++; continue;
           } catch {}
         }
 
-        // 5) data-idx / idx 属性
         const dIdx = (el.dataset && el.dataset.idx) || el.getAttribute?.('data-idx');
         if (dIdx) { try{ set.add(makeByIdx(dIdx)); cIdx++; continue; }catch{} }
       }
 
-      // 6) form + hidden input name=idx
       d.querySelectorAll('form').forEach(f=>{
         try{
-          const act = f.getAttribute('action') || '';
           const idxInput = f.querySelector('input[name="idx"]');
           const v = idxInput && (idxInput.value || idxInput.getAttribute('value'));
           if (v) { set.add(makeByIdx(v)); cIdx++; }
         }catch{}
       });
 
-      // 7) input[name=idx] 直取り（フォーム外にあっても拾う）
       d.querySelectorAll('input[name="idx"]').forEach(i=>{
         const v = i.value || i.getAttribute('value');
         if (v) { try{ set.add(makeByIdx(v)); cIdx++; }catch{} }
       });
 
-      // 8) HTML 正規表現（最後の砦）
       const html = d.documentElement?.innerHTML || '';
       for (const m of html.matchAll(/href=["']([^"']*\/playlogdetail[^"']*)["']/ig)) {
         try { set.add(new URL(m[1], location.href).toString()); cRegex++; } catch {}
@@ -197,9 +179,18 @@
     return Array.from(set).slice(0, 50);
   }
 
-  // ---------- ingest ----------
+  // ---------- ingest（詳細HTMLを取得して送信） ----------
   async function postHtml(api, token, url) {
-    const html = document.documentElement.outerHTML;
+    let html = "";
+    try {
+      const r = await fetch(url, { credentials: "include", cache: "no-store" });
+      if (!r.ok) throw new Error("detail fetch failed: " + r.status);
+      html = await r.text();
+    } catch (e) {
+      console.warn("[MRC] fetch detail failed:", e);
+      return false;
+    }
+
     const res = await fetch(api, {
       method:"POST",
       headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+token },
@@ -210,7 +201,6 @@
 
   // ---------- main ----------
   (async () => {
-    // 0) register
     let env;
     try { env = await getOrRegister(); }
     catch(e){
@@ -220,11 +210,9 @@
       return;
     }
 
-    // 1) 開始ダイアログ
     open(`履歴データを取得・送信します。`,[
       {label:"やめる", cls:"gray", onClick:close},
       {label:"開始",  cls:"green", onClick: async()=>{
-        // 自動スクロールで末尾までロード
         await autoScroll(36, 700);
 
         let urls = collectLinksRobust();
@@ -257,7 +245,6 @@
     ]);
 
     async function startIngest(urls){
-      // 進捗UI
       const bar = document.createElement("div"); bar.className="mrc-bar";
       open(`履歴データ（${urls.length}件）を送信中…<div class="mrc-p"><div class="mrc-bar" id="mrc-bar"></div></div>`,[
         {label:"閉じる", cls:"gray", onClick:close},
@@ -265,16 +252,14 @@
       ]);
       $("#mrc-bar")?.replaceWith(bar);
 
-      // 送信
       let ok=0, ng=0;
       for (let i=0;i<urls.length;i++){
         try{ (await postHtml(env.api, env.token, urls[i])) ? ok++ : ng++; }
         catch{ ng++; }
         bar.style.width = Math.round(((i+1)/urls.length)*100) + "%";
-        await sleep(60);
+        await sleep(80);
       }
 
-      // 完了
       open(`完了：<b>${ok}/${urls.length}</b>　失敗：${ng} 件`,[
         {label:"閉じる", cls:"gray", onClick:close},
         {label:"結果ページへ", cls:"green", onClick:()=>location.href=`${VIEW}?user_id=${localStorage.getItem(LS.uid)}`}
